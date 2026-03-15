@@ -22,7 +22,8 @@ class CommandLineConfigLayerLoader final : public Config::ConfigLayerLoader
 {
 public:
   CommandLineConfigLayerLoader(const std::list<std::string>& args, const std::string& video_backend,
-                               const std::string& audio_backend, bool batch, bool debugger)
+                               const std::string& audio_backend, bool batch, bool debugger,
+                               bool persistent_render)
       : ConfigLayerLoader(Config::LayerType::CommandLine)
   {
     if (!video_backend.empty())
@@ -41,6 +42,10 @@ public:
 
     if (debugger)
       m_values.emplace_back(Config::MAIN_ENABLE_DEBUGGING.GetLocation(), ValueToString(true));
+
+    if (persistent_render)
+      m_values.emplace_back(Config::MAIN_PERSISTENT_RENDER_WINDOW.GetLocation(),
+                            ValueToString(true));
 
     // Arguments are in the format of <System>.<Section>.<Key>=Value
     for (const auto& arg : args)
@@ -116,6 +121,9 @@ std::unique_ptr<optparse::OptionParser> CreateParser(ParserOptions options)
         .action("store_true")
         .help("Run Dolphin without the user interface (Requires --exec or --nand-title)");
     parser->add_option("-c", "--confirm").action("store_true").help("Set Confirm on Stop");
+    parser->add_option("--persistent-render")
+        .action("store_true")
+        .help("Keep the render window open at all times");
   }
 
   parser->set_defaults("video_backend", "");
@@ -137,7 +145,8 @@ static void AddConfigLayer(const optparse::Values& options)
   Config::AddLayer(std::make_unique<CommandLineConfigLayerLoader>(
       std::move(config_args), static_cast<const char*>(options.get("video_backend")),
       static_cast<const char*>(options.get("audio_emulation")),
-      static_cast<bool>(options.get("batch")), static_cast<bool>(options.get("debugger"))));
+      static_cast<bool>(options.get("batch")), static_cast<bool>(options.get("debugger")),
+      static_cast<bool>(options.get("persistent_render"))));
 }
 
 optparse::Values& ParseArguments(optparse::OptionParser* parser, int argc, char** argv)

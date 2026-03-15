@@ -204,6 +204,8 @@ void InterfacePane::CreateInGame()
       new ConfigBool(tr("Show Active Title in Window Title"), Config::MAIN_SHOW_ACTIVE_TITLE);
   m_checkbox_pause_on_focus_lost =
       new ConfigBool(tr("Pause on Focus Loss"), Config::MAIN_PAUSE_ON_FOCUS_LOST);
+  m_checkbox_persistent_render_window =
+      new ConfigBool(tr("Keep Render Window Open"), Config::MAIN_PERSISTENT_RENDER_WINDOW);
 
   auto* mouse_groupbox = new QGroupBox(tr("Mouse Cursor Visibility"));
   auto* m_vboxlayout_hide_mouse = new QVBoxLayout;
@@ -231,6 +233,7 @@ void InterfacePane::CreateInGame()
   groupbox_layout->addWidget(m_checkbox_use_panic_handlers);
   groupbox_layout->addWidget(m_checkbox_show_active_title);
   groupbox_layout->addWidget(m_checkbox_pause_on_focus_lost);
+  groupbox_layout->addWidget(m_checkbox_persistent_render_window);
   groupbox_layout->addWidget(mouse_groupbox);
 #ifdef _WIN32
   groupbox_layout->addWidget(m_checkbox_lock_mouse);
@@ -375,6 +378,11 @@ void InterfacePane::AddDescriptions()
   static constexpr char TR_PAUSE_ON_FOCUS_LOST_DESCRIPTION[] =
       QT_TR_NOOP("Pauses the game whenever the render window isn't focused."
                  "<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>");
+  static constexpr char TR_PERSISTENT_RENDER_WINDOW_DESCRIPTION[] =
+      QT_TR_NOOP("Keeps the render window open and visible at all times while Dolphin is running. "
+                 "When no game is active, the window shows a black screen. This avoids window "
+                 "flashing when switching between games."
+                 "<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>");
   static constexpr char TR_LOCK_MOUSE_DESCRIPTION[] =
       QT_TR_NOOP("Locks the mouse cursor to the Render Widget as long as it has focus. You can "
                  "set a hotkey to unlock it."
@@ -419,6 +427,9 @@ void InterfacePane::AddDescriptions()
   m_checkbox_show_active_title->SetDescription(tr(TR_SHOW_ACTIVE_TITLE_DESCRIPTION));
 
   m_checkbox_pause_on_focus_lost->SetDescription(tr(TR_PAUSE_ON_FOCUS_LOST_DESCRIPTION));
+
+  m_checkbox_persistent_render_window->SetDescription(
+      tr(TR_PERSISTENT_RENDER_WINDOW_DESCRIPTION));
 
   m_checkbox_lock_mouse->SetDescription(tr(TR_LOCK_MOUSE_DESCRIPTION));
 

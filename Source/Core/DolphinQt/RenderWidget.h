@@ -8,6 +8,7 @@
 
 class QMouseEvent;
 class QTimer;
+class QWindow;
 
 class RenderWidget final : public QWidget
 {
@@ -18,11 +19,14 @@ public:
 
   bool event(QEvent* event) override;
   void showFullScreen();
-  QPaintEngine* paintEngine() const override;
   bool IsCursorLocked() const { return m_cursor_locked; }
   void SetCursorLockedOnNextActivation(bool locked = true);
   void SetWaitingForMessageBox(bool waiting_for_message_box);
   void SetCursorLocked(bool locked, bool follow_aspect_ratio = true);
+
+  // Child surface for video backend native handle.
+  QWindow* GetSurfaceWindow() const;
+  void RecreateSurface();
 
 signals:
   void EscapePressed();
@@ -34,6 +38,7 @@ signals:
 
 private:
   void HandleCursorTimer();
+  void CreateSurface();
   void OnHandleChanged(void* handle);
   void OnHideCursorChanged();
   void OnNeverHideCursorChanged();
@@ -56,4 +61,5 @@ private:
   bool m_dont_lock_cursor_on_show = false;
   bool m_waiting_for_message_box = false;
   bool m_should_unpause_on_focus = false;
+  QWidget* m_render_surface = nullptr;
 };

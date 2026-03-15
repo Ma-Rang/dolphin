@@ -123,7 +123,10 @@ bool Host::GetRenderFocus()
   // to avoid inputs that cause a focus loss to be processed by the emulation
   if (m_render_to_main && !m_render_fullscreen)
     return GetForegroundWindow() == (HWND)m_main_window_handle.load();
-  return GetForegroundWindow() == (HWND)m_render_handle.load();
+  // m_render_handle may point to a child surface HWND (used by the video backend).
+  // GetForegroundWindow() returns the top-level window, so we need GetAncestor()
+  // to walk up from the child to its root for a valid comparison.
+  return GetForegroundWindow() == GetAncestor((HWND)m_render_handle.load(), GA_ROOT);
 #else
   return m_render_focus;
 #endif

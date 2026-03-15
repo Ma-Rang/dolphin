@@ -36,6 +36,23 @@
 #include <dwmapi.h>
 #endif
 
+// Lightweight child widget whose sole purpose is to own a native window handle
+// for the video backend.  Recreating it gives D3D / Vulkan / GL a fresh handle
+// without touching the outer RenderWidget window.
+namespace
+{
+class RenderSurface final : public QWidget
+{
+public:
+  explicit RenderSurface(QWidget* parent) : QWidget(parent)
+  {
+    setAttribute(Qt::WA_NativeWindow);
+    setAttribute(Qt::WA_PaintOnScreen);
+  }
+  QPaintEngine* paintEngine() const override { return nullptr; }
+};
+}  // namespace
+
 RenderWidget::RenderWidget(QWidget* parent) : QWidget(parent)
 {
   setWindowTitle(QStringLiteral("Dolphin"));
@@ -89,14 +106,34 @@ RenderWidget::RenderWidget(QWidget* parent) : QWidget(parent)
   OnKeepOnTopChanged(Settings::Instance().IsKeepWindowOnTopEnabled());
   m_mouse_timer->start(MOUSE_HIDE_DELAY);
 
-  // We need a native window to render into.
+  // We need a native window to host the render surface child.
   setAttribute(Qt::WA_NativeWindow);
-  setAttribute(Qt::WA_PaintOnScreen);
+
+  // The parent paints a black background — visible during game-switch transitions
+  // while the child surface is being recreated.
+  setAutoFillBackground(true);
+
+  CreateSurface();
 }
 
-QPaintEngine* RenderWidget::paintEngine() const
+void RenderWidget::CreateSurface()
 {
-  return nullptr;
+  m_render_surface = new RenderSurface(this);
+  m_render_surface->setGeometry(0, 0, width(), height());
+  m_render_surface->show();
+}
+
+void RenderWidget::RecreateSurface()
+{
+  delete m_render_surface;
+  m_render_surface = nullptr;
+  CreateSurface();
+  emit HandleChanged(reinterpret_cast<void*>(m_render_surface->winId()));
+}
+
+QWindow* RenderWidget::GetSurfaceWindow() const
+{
+  return m_render_surface ? m_render_surface->windowHandle() : nullptr;
 }
 
 void RenderWidget::dragEnterEvent(QDragEnterEvent* event)
@@ -403,7 +440,9 @@ bool RenderWidget::event(QEvent* event)
     }
     break;
   case QEvent::WinIdChange:
-    emit HandleChanged(reinterpret_cast<void*>(winId()));
+    // The video backend uses the surface child's handle, not ours.
+    if (m_render_surface)
+      emit HandleChanged(reinterpret_cast<void*>(m_render_surface->winId()));
     break;
   case QEvent::Show:
     // Don't do if "stay on top" changed (or was true)
@@ -472,6 +511,10 @@ bool RenderWidget::event(QEvent* event)
   case QEvent::Paint:
   case QEvent::Resize:
   {
+    // Keep the render surface child filling our entire area.
+    if (m_render_surface)
+      m_render_surface->setGeometry(0, 0, width(), height());
+
     SetCursorLocked(m_cursor_locked);
 
     const QResizeEvent* se = static_cast<QResizeEvent*>(event);

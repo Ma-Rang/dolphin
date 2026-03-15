@@ -369,7 +369,7 @@ MainWindow::~MainWindow()
 
 WindowSystemInfo MainWindow::GetWindowSystemInfo() const
 {
-  return ::GetWindowSystemInfo(m_render_widget->windowHandle());
+  return ::GetWindowSystemInfo(m_render_widget->GetSurfaceWindow());
 }
 
 void MainWindow::InitControllers()
@@ -899,7 +899,45 @@ void MainWindow::TogglePause()
 void MainWindow::OnStopComplete()
 {
   m_stop_requested = false;
-  HideRenderWidget(!m_exit_requested, m_exit_requested);
+
+  // If a pending boot is queued and persistent render is enabled, recreate just
+  // the render surface (child widget) to give D3D/Vulkan a fresh native handle,
+  // then boot immediately.  The outer RenderWidget stays alive — no flash.
+  if (m_pending_boot != nullptr &&
+      Config::Get(Config::MAIN_PERSISTENT_RENDER_WINDOW))
+  {
+    m_render_widget->RecreateSurface();
+
+    g_controller_interface.ChangeWindow(
+        ::GetWindowSystemInfo(m_render_widget->GetSurfaceWindow()).render_window,
+        ControllerInterface::WindowChangeReason::Other);
+
+    if (!BootManager::BootCore(m_system, std::move(m_pending_boot),
+                               ::GetWindowSystemInfo(m_render_widget->GetSurfaceWindow())))
+    {
+      HideRenderWidget();
+    }
+    m_pending_boot.reset();
+    return;
+  }
+
+  // When persistent render is enabled, not exiting, and using an external window
+  // (not render-to-main), skip destroying the render widget — leave it showing black.
+  // In render-to-main mode, we must hide the widget to reveal the game list.
+  if (Config::Get(Config::MAIN_PERSISTENT_RENDER_WINDOW) && !m_exit_requested &&
+      !m_rendering_to_main)
+  {
+    m_render_widget->RecreateSurface();
+
+    g_controller_interface.ChangeWindow(
+        ::GetWindowSystemInfo(m_render_widget->GetSurfaceWindow()).render_window,
+        ControllerInterface::WindowChangeReason::Other);
+  }
+  else
+  {
+    HideRenderWidget(!m_exit_requested, m_exit_requested);
+  }
+
 #ifdef USE_DISCORD_PRESENCE
   if (!m_netplay_dialog->isVisible())
     Discord::UpdateDiscordPresence();
@@ -1195,7 +1233,7 @@ void MainWindow::StartGame(std::unique_ptr<BootParameters>&& parameters)
 
   // Boot up, show an error if it fails to load the game.
   if (!BootManager::BootCore(m_system, std::move(parameters),
-                             ::GetWindowSystemInfo(m_render_widget->windowHandle())))
+                             ::GetWindowSystemInfo(m_render_widget->GetSurfaceWindow())))
   {
     ModalMessageBox::critical(this, tr("Error"), tr("Failed to init core"), QMessageBox::Ok);
     HideRenderWidget();
