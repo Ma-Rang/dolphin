@@ -260,6 +260,15 @@ int main(int argc, char* argv[])
     Settings::Instance().InitDefaultPalette();
     Settings::Instance().ApplyStyle();
 
+    // If --ipc_port was specified, override the GUI setting via the CurrentRun layer
+    // (higher priority than Base, doesn't persist to Dolphin.ini).
+    const int cli_ipc_port = static_cast<int>(options.get("ipc_port"));
+    if (cli_ipc_port > 0)
+    {
+      Config::SetCurrent(Config::MAIN_IPC_SERVER_ENABLED, true);
+      Config::SetCurrent(Config::MAIN_IPC_SERVER_PORT, cli_ipc_port);
+    }
+
     MainWindow win{Core::System::GetInstance(), std::move(boot),
                    static_cast<const char*>(options.get("movie"))};
 

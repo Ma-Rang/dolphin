@@ -106,6 +106,13 @@ std::unique_ptr<optparse::OptionParser> CreateParser(ParserOptions options)
       .type("string")
       .help("Load the initial save state");
 
+  parser->add_option("--ipc_port")
+      .action("store")
+      .type("int")
+      .set_default(0)
+      .metavar("<port>")
+      .help("Enable the IPC server on the specified TCP port for external control");
+
   if (options == ParserOptions::IncludeGUIOptions)
   {
     parser->add_option("-d", "--debugger")

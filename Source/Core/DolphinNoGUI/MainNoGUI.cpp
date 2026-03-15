@@ -6,6 +6,7 @@
 #include <OptionParser.h>
 #include <csignal>
 #include <cstdio>
+#include <fmt/format.h>
 #include <string>
 #include <vector>
 
@@ -15,11 +16,15 @@
 #include <Windows.h>
 #endif
 
+#include "Common/Config/Config.h"
 #include "Common/ScopeGuard.h"
 #include "Core/Boot/Boot.h"
 #include "Core/BootManager.h"
+#include "Core/Config/MainSettings.h"
 #include "Core/Core.h"
 #include "Core/DolphinAnalytics.h"
+#include "Core/DolphinIPC.h"
+#include "Core/HW/DVD/DVDInterface.h"
 #include "Core/Host.h"
 #include "Core/System.h"
 
@@ -30,6 +35,7 @@
 #include "UICommon/UICommon.h"
 
 static std::unique_ptr<Platform> s_platform;
+static std::unique_ptr<DolphinIPC::Server> s_ipc_server;
 
 static void signal_handler(int)
 {
@@ -149,6 +155,74 @@ bool Host_UpdateDiscordPresenceRaw(const std::string& details, const std::string
 std::unique_ptr<GBAHostInterface> Host_CreateGBAHost(std::weak_ptr<HW::GBA::Core> core)
 {
   return nullptr;
+}
+
+static void InitIPCServer(u16 port)
+{
+  auto& system = Core::System::GetInstance();
+
+  DolphinIPC::FrontendCallbacks frontend;
+
+  // Boot game — stop current emulation if running, then boot.
+  // Note: game switching (stop + reboot) is not yet supported in NoGUI.
+  // For now, boot only works when emulation is not running.
+  frontend.boot_game = [&system](const std::string& path) {
+    auto boot = BootParameters::GenerateFromFile(path);
+    if (!boot)
+      return;
+    if (Core::IsRunning(system))
+    {
+      Core::Stop(system);
+      return;
+    }
+    // WSI not available here — NoGUI boot_game only works at startup via CLI.
+  };
+
+  frontend.boot_nand = [&system](u64 title_id) {
+    if (Core::IsRunning(system))
+    {
+      Core::Stop(system);
+      return;
+    }
+  };
+
+  frontend.force_stop = [&system]() {
+    if (Core::IsRunning(system))
+      Core::Stop(system);
+  };
+
+  frontend.fullscreen_toggle = []() -> std::string {
+    return "ERR Not available in headless mode";
+  };
+
+  frontend.change_disc = [&system](const std::string& b64path) -> std::string {
+    const std::string path = DolphinIPC::DecodeBase64(b64path);
+    if (path.empty())
+      return "ERR Invalid base64 path";
+    if (!Core::IsRunning(system))
+      return "ERR Emulation not running";
+    Core::QueueHostJob([path](Core::System& sys) {
+      sys.GetDVDInterface().ChangeDisc(Core::CPUThreadGuard{sys}, path);
+    });
+    return "OK";
+  };
+
+  frontend.eject_disc = [&system]() -> std::string {
+    if (!Core::IsRunning(system))
+      return "ERR Emulation not running";
+    Core::QueueHostJob([](Core::System& sys) {
+      sys.GetDVDInterface().EjectDisc(Core::CPUThreadGuard{sys}, DVD::EjectCause::User);
+    });
+    return "OK";
+  };
+
+  frontend.list_games = []() -> std::string {
+    return "ERR Not available in headless mode";
+  };
+
+  auto handler = DolphinIPC::CreateHandlers(system, std::move(frontend));
+  s_ipc_server = std::make_unique<DolphinIPC::Server>(port, std::move(handler));
+  s_ipc_server->Start();
 }
 
 static std::unique_ptr<Platform> GetPlatform(const optparse::Values& options)
@@ -283,6 +357,21 @@ int main(const int argc, char* argv[])
     return 1;
   }
 
+  // Set up IPC server via CLI override or config.
+  const int cli_ipc_port = static_cast<int>(options.get("ipc_port"));
+  if (cli_ipc_port > 0)
+  {
+    Config::SetCurrent(Config::MAIN_IPC_SERVER_ENABLED, true);
+    Config::SetCurrent(Config::MAIN_IPC_SERVER_PORT, cli_ipc_port);
+  }
+
+  const bool ipc_enabled = Config::Get(Config::MAIN_IPC_SERVER_ENABLED);
+  if (ipc_enabled)
+  {
+    const u16 ipc_port = static_cast<u16>(Config::Get(Config::MAIN_IPC_SERVER_PORT));
+    InitIPCServer(ipc_port);
+  }
+
   auto core_state_changed_hook = Core::AddOnStateChangedCallback([](const Core::State state) {
     if (state == Core::State::Uninitialized)
       s_platform->Stop();
@@ -315,6 +404,13 @@ int main(const int argc, char* argv[])
 
   s_platform->MainLoop();
   Core::Stop(Core::System::GetInstance());
+
+  // Clean up IPC server.
+  if (s_ipc_server)
+  {
+    s_ipc_server->Stop();
+    s_ipc_server.reset();
+  }
 
   Core::Shutdown(Core::System::GetInstance());
   s_platform.reset();

@@ -24,8 +24,11 @@
 #include "Core/Core.h"
 #include "Core/System.h"
 
+#include "Common/Config/Config.h"
+
 #include "DolphinQt/Config/ConfigControls/ConfigBool.h"
 #include "DolphinQt/Config/ConfigControls/ConfigChoice.h"
+#include "DolphinQt/Config/ConfigControls/ConfigInteger.h"
 #include "DolphinQt/Config/ConfigControls/ConfigRadio.h"
 #include "DolphinQt/Config/ToolTipControls/ToolTipCheckBox.h"
 #include "DolphinQt/Config/ToolTipControls/ToolTipComboBox.h"
@@ -106,6 +109,7 @@ void InterfacePane::CreateLayout()
   // Create layout here
   CreateUI();
   CreateInGame();
+  CreateRemoteControl();
   AddDescriptions();
 
   m_main_layout->addStretch(1);
@@ -239,6 +243,48 @@ void InterfacePane::CreateInGame()
 #endif
 }
 
+void InterfacePane::CreateRemoteControl()
+{
+  auto* groupbox = new QGroupBox(tr("Remote Control"));
+  auto* groupbox_layout = new QVBoxLayout;
+  groupbox->setLayout(groupbox_layout);
+  m_main_layout->addWidget(groupbox);
+
+  m_checkbox_ipc_enabled =
+      new ConfigBool(tr("Enable IPC Server"), Config::MAIN_IPC_SERVER_ENABLED);
+
+  auto* port_layout = new QFormLayout;
+  port_layout->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
+  port_layout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+
+  m_spinbox_ipc_port = new ConfigInteger(1024, 65535, Config::MAIN_IPC_SERVER_PORT);
+
+  m_label_ipc_cli_override = new QLabel();
+  m_label_ipc_cli_override->setWordWrap(true);
+  m_label_ipc_cli_override->hide();
+
+  const bool cli_override =
+      Config::GetActiveLayerForConfig(Config::MAIN_IPC_SERVER_ENABLED) ==
+          Config::LayerType::CurrentRun ||
+      Config::GetActiveLayerForConfig(Config::MAIN_IPC_SERVER_PORT) ==
+          Config::LayerType::CurrentRun;
+
+  if (cli_override)
+  {
+    const int port = Config::Get(Config::MAIN_IPC_SERVER_PORT);
+    m_label_ipc_cli_override->setText(
+        tr("Overridden by --ipc_port command line argument (port %1)").arg(port));
+    m_label_ipc_cli_override->show();
+    m_checkbox_ipc_enabled->setEnabled(false);
+    m_spinbox_ipc_port->setEnabled(false);
+  }
+
+  groupbox_layout->addWidget(m_checkbox_ipc_enabled);
+  port_layout->addRow(tr("&Port:"), m_spinbox_ipc_port);
+  groupbox_layout->addLayout(port_layout);
+  groupbox_layout->addWidget(m_label_ipc_cli_override);
+}
+
 void InterfacePane::ConnectLayout()
 {
   connect(m_checkbox_use_builtin_title_database, &QCheckBox::toggled, &Settings::Instance(),
@@ -263,6 +309,10 @@ void InterfacePane::ConnectLayout()
           &Settings::CursorVisibilityChanged);
   connect(m_checkbox_lock_mouse, &QCheckBox::toggled, &Settings::Instance(),
           &Settings::LockCursorChanged);
+  connect(m_checkbox_ipc_enabled, &QCheckBox::toggled, &Settings::Instance(),
+          &Settings::IPCServerSettingChanged);
+  connect(m_spinbox_ipc_port, &QSpinBox::valueChanged, &Settings::Instance(),
+          &Settings::IPCServerSettingChanged);
 }
 
 void InterfacePane::UpdateShowDebuggingCheckbox()
@@ -430,4 +480,19 @@ void InterfacePane::AddDescriptions()
 
   m_combobox_userstyle->SetTitle(tr("Style"));
   m_combobox_userstyle->SetDescription(tr(TR_USER_STYLE_DESCRIPTION));
+
+  static constexpr char TR_IPC_ENABLED_DESCRIPTION[] = QT_TR_NOOP(
+      "Enables a TCP server that allows external programs to control Dolphin. Used by the Dolphin "
+      "Launchers Helper application, Decky Loader plugin for Steam Deck, and other automation "
+      "tools. Can also be enabled with the --ipc_port command line argument."
+      "<br><br>See the Dolphin Wiki for protocol documentation."
+      "<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>");
+  static constexpr char TR_IPC_PORT_DESCRIPTION[] = QT_TR_NOOP(
+      "The TCP port number the IPC server listens on. External programs connect to this port to "
+      "send commands to Dolphin."
+      "<br><br><dolphin_emphasis>If unsure, leave this at 4830.</dolphin_emphasis>");
+
+  m_checkbox_ipc_enabled->SetDescription(tr(TR_IPC_ENABLED_DESCRIPTION));
+
+  m_spinbox_ipc_port->SetDescription(tr(TR_IPC_PORT_DESCRIPTION));
 }

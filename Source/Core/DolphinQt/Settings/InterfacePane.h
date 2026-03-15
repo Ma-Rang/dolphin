@@ -6,6 +6,7 @@
 #include <QWidget>
 
 class ConfigBool;
+class ConfigInteger;
 class ConfigRadioInt;
 class ConfigStringChoice;
 class QLabel;
@@ -28,6 +29,7 @@ private:
   void CreateLayout();
   void CreateUI();
   void CreateInGame();
+  void CreateRemoteControl();
   void AddDescriptions();
   void ConnectLayout();
   void UpdateShowDebuggingCheckbox();
@@ -59,4 +61,8 @@ private:
   ConfigRadioInt* m_radio_cursor_visible_never;
   ConfigRadioInt* m_radio_cursor_visible_always;
   ConfigBool* m_checkbox_lock_mouse;
+
+  ConfigBool* m_checkbox_ipc_enabled;
+  ConfigInteger* m_spinbox_ipc_port;
+  QLabel* m_label_ipc_cli_override;
 };

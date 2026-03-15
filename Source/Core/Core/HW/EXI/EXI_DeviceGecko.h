@@ -23,6 +23,10 @@ public:
   ~GeckoSockServer();
   bool GetAvailableSock();
 
+  // Query the TCP server state (used by IPC GET_GECKO_PORT).
+  static u16 GetServerPort() { return server_port; }
+  static bool IsServerRunning() { return server_running.IsSet(); }
+
   // Client for this server object
   std::unique_ptr<sf::TcpSocket> client;
   void ClientThread();

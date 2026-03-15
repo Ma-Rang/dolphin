@@ -23,6 +23,8 @@ add_library(core
   CheatSearch.cpp
   CheatSearch.h
   CommonTitles.h
+  DolphinIPC.cpp
+  DolphinIPC.h
   Config/AchievementSettings.cpp
   Config/AchievementSettings.h
   Config/DefaultLocale.cpp
