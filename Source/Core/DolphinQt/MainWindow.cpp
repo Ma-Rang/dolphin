@@ -324,6 +324,14 @@ MainWindow::MainWindow(Core::System& system, std::unique_ptr<BootParameters> boo
 
   Host::GetInstance()->SetMainWindowHandle(reinterpret_cast<void*>(winId()));
 
+  // If persistent render is enabled and we're not rendering to main,
+  // show the render window immediately (even without a game running).
+  if (Config::Get(Config::MAIN_PERSISTENT_RENDER_WINDOW) &&
+      !Config::Get(Config::MAIN_RENDER_TO_MAIN) && m_pending_boot == nullptr)
+  {
+    ShowRenderWidget();
+  }
+
   if (m_pending_boot != nullptr)
   {
     StartGame(std::move(m_pending_boot));
@@ -901,11 +909,13 @@ void MainWindow::OnStopComplete()
   m_stop_requested = false;
 
   // If a pending boot is queued and persistent render is enabled, recreate just
-  // the render surface (child widget) to give D3D/Vulkan a fresh native handle,
-  // then boot immediately.  The outer RenderWidget stays alive — no flash.
+  // the render surface (child widget) to give D3D a fresh HWND, then boot
+  // immediately.  The outer RenderWidget stays alive — no window flash.
   if (m_pending_boot != nullptr &&
       Config::Get(Config::MAIN_PERSISTENT_RENDER_WINDOW))
   {
+    const bool was_fullscreen = m_render_widget->isFullScreen();
+
     m_render_widget->RecreateSurface();
 
     g_controller_interface.ChangeWindow(
@@ -917,21 +927,21 @@ void MainWindow::OnStopComplete()
     {
       HideRenderWidget();
     }
+    else if (was_fullscreen || Config::Get(Config::MAIN_FULLSCREEN))
+    {
+      m_fullscreen_requested = true;
+    }
     m_pending_boot.reset();
     return;
   }
 
   // When persistent render is enabled, not exiting, and using an external window
-  // (not render-to-main), skip destroying the render widget — leave it showing black.
+  // (not render-to-main), skip destroying the render widget — leave it open.
   // In render-to-main mode, we must hide the widget to reveal the game list.
   if (Config::Get(Config::MAIN_PERSISTENT_RENDER_WINDOW) && !m_exit_requested &&
       !m_rendering_to_main)
   {
-    m_render_widget->RecreateSurface();
-
-    g_controller_interface.ChangeWindow(
-        ::GetWindowSystemInfo(m_render_widget->GetSurfaceWindow()).render_window,
-        ControllerInterface::WindowChangeReason::Other);
+    // Nothing to do — the widget stays alive as-is.
   }
   else
   {
