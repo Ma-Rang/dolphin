@@ -884,6 +884,12 @@ CommandHandler CreateHandlers(Core::System& system, FrontendCallbacks frontend)
 
   handler.on_fullscreen_toggle = std::move(frontend.fullscreen_toggle);
 
+  handler.on_get_fullscreen = [is_fs = frontend.is_fullscreen]() -> std::string {
+    if (!is_fs)
+      return "ERR Not supported";
+    return is_fs() ? "OK true" : "OK false";
+  };
+
   // --- Shared handlers ---
 
   handler.on_status = [&system]() -> std::string { return GetCoreStateString(system); };
@@ -1270,6 +1276,19 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
     const std::string result = handler.on_fullscreen_toggle();
     if (result == "OK")
       return JsonOk().serialize();
+    return JsonError(result.substr(0, 4) == "ERR " ? result.substr(4) : result).serialize();
+  }
+  // --- get_fullscreen ---
+  else if (c == "get_fullscreen")
+  {
+    if (!handler.on_get_fullscreen)
+      return JsonError("Not implemented").serialize();
+    const std::string result = handler.on_get_fullscreen();
+    if (result.find("OK") == 0)
+    {
+      bool fs = result.find("true") != std::string::npos;
+      return JsonOkWith("fullscreen", picojson::value(fs)).serialize();
+    }
     return JsonError(result.substr(0, 4) == "ERR " ? result.substr(4) : result).serialize();
   }
   // --- wiimote_sync ---

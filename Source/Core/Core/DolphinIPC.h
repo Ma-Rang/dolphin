@@ -62,6 +62,9 @@ struct FrontendCallbacks
   // Toggle fullscreen (Qt only; NoGUI returns ERR).
   std::function<std::string()> fullscreen_toggle;
 
+  // Query fullscreen state (Qt only; NoGUI returns ERR).
+  std::function<bool()> is_fullscreen;
+
   // Change disc without stopping emulation (requires CPUThreadGuard).
   std::function<std::string(const std::string& path)> change_disc;
 
@@ -92,6 +95,7 @@ struct CommandHandler
                             const std::string& key, const std::string& value)>
       on_set_config;
   std::function<std::string()> on_fullscreen_toggle;
+  std::function<std::string()> on_get_fullscreen;
   std::function<std::string()> on_wiimote_sync;
   std::function<std::string()> on_wiimote_refresh;
   std::function<std::string(int channel, int device_type)> on_gc_change_device;

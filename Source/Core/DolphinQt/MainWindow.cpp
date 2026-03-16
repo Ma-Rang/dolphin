@@ -419,6 +419,10 @@ void MainWindow::InitIPCServer(u16 port)
     return "OK";
   };
 
+  frontend.is_fullscreen = [this]() -> bool {
+    return m_render_widget && m_render_widget->isFullScreen();
+  };
+
   frontend.change_disc = [this](const std::string& b64path) -> std::string {
     const std::string path = DolphinIPC::DecodeBase64(b64path);
     if (path.empty())
