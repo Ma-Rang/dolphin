@@ -27,6 +27,7 @@ public:
   // Child surface for video backend native handle.
   QWindow* GetSurfaceWindow() const;
   void RecreateSurface();
+  void DestroySurface();
 
 signals:
   void EscapePressed();

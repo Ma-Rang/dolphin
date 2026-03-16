@@ -131,6 +131,14 @@ void RenderWidget::RecreateSurface()
   emit HandleChanged(reinterpret_cast<void*>(m_render_surface->winId()));
 }
 
+void RenderWidget::DestroySurface()
+{
+  delete m_render_surface;
+  m_render_surface = nullptr;
+  // Trigger a repaint so the parent's black background is shown immediately.
+  update();
+}
+
 QWindow* RenderWidget::GetSurfaceWindow() const
 {
   return m_render_surface ? m_render_surface->windowHandle() : nullptr;

@@ -941,7 +941,9 @@ void MainWindow::OnStopComplete()
   if (Config::Get(Config::MAIN_PERSISTENT_RENDER_WINDOW) && !m_exit_requested &&
       !m_rendering_to_main)
   {
-    // Nothing to do — the widget stays alive as-is.
+    // Destroy the render surface child so the parent's black background shows
+    // instead of the last rendered frame.
+    m_render_widget->DestroySurface();
   }
   else
   {
@@ -1240,6 +1242,11 @@ void MainWindow::StartGame(std::unique_ptr<BootParameters>&& parameters)
 
   // We need the render widget before booting.
   ShowRenderWidget();
+
+  // Ensure the render surface child exists (it may have been destroyed when the
+  // previous game stopped, so the parent could show a black background).
+  if (!m_render_widget->GetSurfaceWindow())
+    m_render_widget->RecreateSurface();
 
   // Boot up, show an error if it fails to load the game.
   if (!BootManager::BootCore(m_system, std::move(parameters),
