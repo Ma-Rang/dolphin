@@ -4,6 +4,7 @@
 #include "Core/DolphinIPC.h"
 
 #include <algorithm>
+#include <charconv>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -89,6 +90,57 @@ static std::string EncodeBase64(const u8* data, size_t len)
     return {};
 
   return std::string(reinterpret_cast<char*>(b64_buf.data()), b64_len);
+}
+
+// Non-throwing numeric parsers (replace std::stoi/stof/stoull).
+static std::optional<int> ParseInt(const std::string& s)
+{
+  int value = 0;
+  auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), value);
+  if (ec != std::errc{} || ptr != s.data() + s.size())
+    return std::nullopt;
+  return value;
+}
+
+static std::optional<int> ParseInt(const char* begin, const char* end)
+{
+  int value = 0;
+  auto [ptr, ec] = std::from_chars(begin, end, value);
+  if (ec != std::errc{} || ptr != end)
+    return std::nullopt;
+  return value;
+}
+
+static std::optional<u64> ParseHexU64(const std::string& s)
+{
+  u64 value = 0;
+  auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), value, 16);
+  if (ec != std::errc{} || ptr != s.data() + s.size())
+    return std::nullopt;
+  return value;
+}
+
+static std::optional<float> ParseFloat(const std::string& s)
+{
+  // std::from_chars for float isn't available on all toolchains, so use strtof.
+  if (s.empty())
+    return std::nullopt;
+  char* end = nullptr;
+  float value = std::strtof(s.c_str(), &end);
+  if (end != s.c_str() + s.size())
+    return std::nullopt;
+  return value;
+}
+
+static std::optional<double> ParseDouble(const std::string& s)
+{
+  if (s.empty())
+    return std::nullopt;
+  char* end = nullptr;
+  double value = std::strtod(s.c_str(), &end);
+  if (end != s.c_str() + s.size())
+    return std::nullopt;
+  return value;
 }
 
 // Split string on spaces into at most max_parts pieces.
@@ -1047,18 +1099,12 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
     const auto title_id_str = JsonGetString(obj, "title_id");
     if (!title_id_str)
       return JsonError("Missing \"title_id\" field").serialize();
-    u64 title_id;
-    try
-    {
-      title_id = std::stoull(*title_id_str, nullptr, 16);
-    }
-    catch (const std::exception&)
-    {
+    const auto title_id = ParseHexU64(*title_id_str);
+    if (!title_id)
       return JsonError("Invalid title ID (expected hex string)").serialize();
-    }
     if (!handler.on_boot_nand)
       return JsonError("Not implemented").serialize();
-    const std::string result = handler.on_boot_nand(title_id);
+    const std::string result = handler.on_boot_nand(*title_id);
     if (result == "OK")
       return JsonOk().serialize();
     return JsonError(result.substr(0, 4) == "ERR " ? result.substr(4) : result).serialize();
@@ -1177,18 +1223,12 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
     const auto tid_str = JsonGetString(obj, "title_id");
     if (!tid_str)
       return JsonError("Missing \"title_id\" field").serialize();
-    u64 title_id;
-    try
-    {
-      title_id = std::stoull(*tid_str, nullptr, 16);
-    }
-    catch (const std::exception&)
-    {
+    const auto title_id = ParseHexU64(*tid_str);
+    if (!title_id)
       return JsonError("Invalid title ID").serialize();
-    }
     if (!handler.on_uninstall_title)
       return JsonError("Not implemented").serialize();
-    const std::string result = handler.on_uninstall_title(title_id);
+    const std::string result = handler.on_uninstall_title(*title_id);
     if (result == "OK")
       return JsonOk().serialize();
     return JsonError(result.substr(0, 4) == "ERR " ? result.substr(4) : result).serialize();
@@ -1199,18 +1239,12 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
     const auto tid_str = JsonGetString(obj, "title_id");
     if (!tid_str)
       return JsonError("Missing \"title_id\" field").serialize();
-    u64 title_id;
-    try
-    {
-      title_id = std::stoull(*tid_str, nullptr, 16);
-    }
-    catch (const std::exception&)
-    {
+    const auto title_id = ParseHexU64(*tid_str);
+    if (!title_id)
       return JsonError("Invalid title ID").serialize();
-    }
     if (!handler.on_is_title_installed)
       return JsonError("Not implemented").serialize();
-    const std::string result = handler.on_is_title_installed(title_id);
+    const std::string result = handler.on_is_title_installed(*title_id);
     return JsonOkWith("installed", picojson::value(result == "OK TRUE")).serialize();
   }
   // --- list_titles ---
@@ -1334,14 +1368,8 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
       // disc_number and revision as numbers.
       if (keys[i] == "DISC_NUMBER" || keys[i] == "REVISION")
       {
-        try
-        {
-          game.emplace(json_key, picojson::value(static_cast<double>(std::stoi(value))));
-        }
-        catch (...)
-        {
-          game.emplace(json_key, picojson::value(0.0));
-        }
+        const auto num = ParseInt(value);
+        game.emplace(json_key, picojson::value(static_cast<double>(num.value_or(0))));
       }
       else
       {
@@ -1408,8 +1436,8 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
         size_t sp = line_buf.find(' ', 5);
         if (sp != std::string::npos)
         {
-          slot_obj.emplace("slot",
-                           picojson::value(static_cast<double>(std::stoi(line_buf.substr(5, sp - 5)))));
+          const auto slot_num = ParseInt(line_buf.data() + 5, line_buf.data() + sp);
+          slot_obj.emplace("slot", picojson::value(static_cast<double>(slot_num.value_or(0))));
           std::string info = line_buf.substr(sp + 1);
           slot_obj.emplace("empty", picojson::value(info == "EMPTY"));
           if (info != "EMPTY")
@@ -1495,14 +1523,11 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
       std::transform(json_key.begin(), json_key.end(), json_key.begin(), ::tolower);
       if (keys[i] == "IPC_VERSION")
       {
-        try
-        {
-          info.emplace(json_key, picojson::value(static_cast<double>(std::stoi(value))));
-        }
-        catch (...)
-        {
+        const auto num = ParseInt(value);
+        if (num)
+          info.emplace(json_key, picojson::value(static_cast<double>(*num)));
+        else
           info.emplace(json_key, picojson::value(value));
-        }
       }
       else
       {
@@ -1531,14 +1556,9 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
     const std::string result = handler.on_get_volume();
     if (result.substr(0, 3) == "OK ")
     {
-      try
-      {
-        return JsonOkWith("volume", picojson::value(static_cast<double>(std::stoi(result.substr(3)))))
-            .serialize();
-      }
-      catch (...)
-      {
-      }
+      const auto vol = ParseInt(result.substr(3));
+      if (vol)
+        return JsonOkWith("volume", picojson::value(static_cast<double>(*vol))).serialize();
     }
     return JsonError("Failed to get volume").serialize();
   }
@@ -1633,14 +1653,11 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
       picojson::object out;
       out.emplace("ok", picojson::value(true));
       out.emplace("active", picojson::value(true));
-      try
-      {
-        out.emplace("port", picojson::value(static_cast<double>(std::stoi(result.substr(3)))));
-      }
-      catch (...)
-      {
+      const auto port_num = ParseInt(result.substr(3));
+      if (port_num)
+        out.emplace("port", picojson::value(static_cast<double>(*port_num)));
+      else
         out.emplace("port", picojson::value(result.substr(3)));
-      }
       return picojson::value(out).serialize();
     }
     return JsonError("Failed to get gecko port").serialize();
@@ -1665,13 +1682,9 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
     const std::string result = handler.on_get_speed();
     if (result.substr(0, 3) == "OK ")
     {
-      try
-      {
-        return JsonOkWith("speed", picojson::value(std::stod(result.substr(3)))).serialize();
-      }
-      catch (...)
-      {
-      }
+      const auto spd = ParseDouble(result.substr(3));
+      if (spd)
+        return JsonOkWith("speed", picojson::value(*spd)).serialize();
     }
     return JsonError("Failed to get speed").serialize();
   }
@@ -2054,17 +2067,12 @@ std::string Server::HandleCommand(const std::string& line)
   {
     if (args.empty())
       return "ERR Missing title ID argument";
-    try
-    {
-      u64 title_id = std::stoull(args, nullptr, 16);
-      if (m_handler.on_boot_nand)
-        return m_handler.on_boot_nand(title_id);
-      return "ERR Not implemented";
-    }
-    catch (const std::exception&)
-    {
+    const auto title_id = ParseHexU64(args);
+    if (!title_id)
       return "ERR Invalid title ID (expected 16-char hex)";
-    }
+    if (m_handler.on_boot_nand)
+      return m_handler.on_boot_nand(*title_id);
+    return "ERR Not implemented";
   }
   else if (verb == "STOP")
   {
@@ -2084,33 +2092,23 @@ std::string Server::HandleCommand(const std::string& line)
   {
     if (args.empty())
       return "ERR Missing title ID argument";
-    try
-    {
-      u64 title_id = std::stoull(args, nullptr, 16);
-      if (m_handler.on_uninstall_title)
-        return m_handler.on_uninstall_title(title_id);
-      return "ERR Not implemented";
-    }
-    catch (const std::exception&)
-    {
+    const auto title_id = ParseHexU64(args);
+    if (!title_id)
       return "ERR Invalid title ID (expected 16-char hex)";
-    }
+    if (m_handler.on_uninstall_title)
+      return m_handler.on_uninstall_title(*title_id);
+    return "ERR Not implemented";
   }
   else if (verb == "IS_TITLE_INSTALLED")
   {
     if (args.empty())
       return "ERR Missing title ID argument";
-    try
-    {
-      u64 title_id = std::stoull(args, nullptr, 16);
-      if (m_handler.on_is_title_installed)
-        return m_handler.on_is_title_installed(title_id);
-      return "ERR Not implemented";
-    }
-    catch (const std::exception&)
-    {
+    const auto title_id = ParseHexU64(args);
+    if (!title_id)
       return "ERR Invalid title ID (expected 16-char hex)";
-    }
+    if (m_handler.on_is_title_installed)
+      return m_handler.on_is_title_installed(*title_id);
+    return "ERR Not implemented";
   }
   else if (verb == "GET_CONFIG")
   {
@@ -2153,18 +2151,13 @@ std::string Server::HandleCommand(const std::string& line)
     auto parts = SplitArgs(args, 2);
     if (parts.size() < 2)
       return "ERR Usage: GC_CHANGE_DEVICE <channel> <device_type>";
-    try
-    {
-      int channel = std::stoi(parts[0]);
-      int device_type = std::stoi(parts[1]);
-      if (m_handler.on_gc_change_device)
-        return m_handler.on_gc_change_device(channel, device_type);
-      return "ERR Not implemented";
-    }
-    catch (const std::exception&)
-    {
+    const auto channel = ParseInt(parts[0]);
+    const auto device_type = ParseInt(parts[1]);
+    if (!channel || !device_type)
       return "ERR Invalid arguments (expected integers)";
-    }
+    if (m_handler.on_gc_change_device)
+      return m_handler.on_gc_change_device(*channel, *device_type);
+    return "ERR Not implemented";
   }
   else if (verb == "GC_ADAPTER_STATUS")
   {
@@ -2199,33 +2192,23 @@ std::string Server::HandleCommand(const std::string& line)
   {
     if (args.empty())
       return "ERR Missing slot argument (1-10)";
-    try
-    {
-      int slot = std::stoi(args);
-      if (m_handler.on_save_state)
-        return m_handler.on_save_state(slot);
-      return "ERR Not implemented";
-    }
-    catch (const std::exception&)
-    {
+    const auto slot = ParseInt(args);
+    if (!slot)
       return "ERR Invalid slot (expected integer 1-10)";
-    }
+    if (m_handler.on_save_state)
+      return m_handler.on_save_state(*slot);
+    return "ERR Not implemented";
   }
   else if (verb == "LOAD_STATE")
   {
     if (args.empty())
       return "ERR Missing slot argument (1-10)";
-    try
-    {
-      int slot = std::stoi(args);
-      if (m_handler.on_load_state)
-        return m_handler.on_load_state(slot);
-      return "ERR Not implemented";
-    }
-    catch (const std::exception&)
-    {
+    const auto slot = ParseInt(args);
+    if (!slot)
       return "ERR Invalid slot (expected integer 1-10)";
-    }
+    if (m_handler.on_load_state)
+      return m_handler.on_load_state(*slot);
+    return "ERR Not implemented";
   }
   else if (verb == "LIST_SAVE_STATES")
   {
@@ -2265,17 +2248,12 @@ std::string Server::HandleCommand(const std::string& line)
   {
     if (args.empty())
       return "ERR Missing volume argument (0-100)";
-    try
-    {
-      int volume = std::stoi(args);
-      if (m_handler.on_set_volume)
-        return m_handler.on_set_volume(volume);
-      return "ERR Not implemented";
-    }
-    catch (const std::exception&)
-    {
+    const auto volume = ParseInt(args);
+    if (!volume)
       return "ERR Invalid volume (expected integer 0-100)";
-    }
+    if (m_handler.on_set_volume)
+      return m_handler.on_set_volume(*volume);
+    return "ERR Not implemented";
   }
   else if (verb == "GET_VOLUME")
   {
@@ -2327,17 +2305,12 @@ std::string Server::HandleCommand(const std::string& line)
   {
     if (args.empty())
       return "ERR Missing speed argument (float, 0=unlimited)";
-    try
-    {
-      float speed = std::stof(args);
-      if (m_handler.on_set_speed)
-        return m_handler.on_set_speed(speed);
-      return "ERR Not implemented";
-    }
-    catch (const std::exception&)
-    {
+    const auto speed = ParseFloat(args);
+    if (!speed)
       return "ERR Invalid speed (expected float)";
-    }
+    if (m_handler.on_set_speed)
+      return m_handler.on_set_speed(*speed);
+    return "ERR Not implemented";
   }
   else if (verb == "GET_SPEED")
   {
