@@ -146,7 +146,8 @@ void GeckoSockServer::ClientThread()
         std::vector<char> packet(send_fifo.begin(), send_fifo.end());
         send_fifo.clear();
 
-        if (client->send(&packet[0], packet.size()) == sf::Socket::Status::Disconnected)
+        std::size_t sent = 0;
+        if (client->send(&packet[0], packet.size(), sent) == sf::Socket::Status::Disconnected)
           client_running.Clear();
       }
     }  // unlock transfer

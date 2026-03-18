@@ -250,6 +250,12 @@ void InterfacePane::CreateRemoteControl()
   groupbox->setLayout(groupbox_layout);
   m_main_layout->addWidget(groupbox);
 
+  m_ipc_cli_override =
+      Config::GetActiveLayerForConfig(Config::MAIN_IPC_SERVER_ENABLED) ==
+          Config::LayerType::CommandLine ||
+      Config::GetActiveLayerForConfig(Config::MAIN_IPC_SERVER_PORT) ==
+          Config::LayerType::CommandLine;
+
   m_checkbox_ipc_enabled =
       new ConfigBool(tr("Enable IPC Server"), Config::MAIN_IPC_SERVER_ENABLED);
 
@@ -259,30 +265,18 @@ void InterfacePane::CreateRemoteControl()
 
   m_spinbox_ipc_port = new ConfigInteger(1024, 65535, Config::MAIN_IPC_SERVER_PORT);
 
-  m_label_ipc_cli_override = new QLabel();
-  m_label_ipc_cli_override->setWordWrap(true);
-  m_label_ipc_cli_override->hide();
-
-  const bool cli_override =
-      Config::GetActiveLayerForConfig(Config::MAIN_IPC_SERVER_ENABLED) ==
-          Config::LayerType::CurrentRun ||
-      Config::GetActiveLayerForConfig(Config::MAIN_IPC_SERVER_PORT) ==
-          Config::LayerType::CurrentRun;
-
-  if (cli_override)
-  {
-    const int port = Config::Get(Config::MAIN_IPC_SERVER_PORT);
-    m_label_ipc_cli_override->setText(
-        tr("Overridden by --ipc_port command line argument (port %1)").arg(port));
-    m_label_ipc_cli_override->show();
-    m_checkbox_ipc_enabled->setEnabled(false);
-    m_spinbox_ipc_port->setEnabled(false);
-  }
-
   groupbox_layout->addWidget(m_checkbox_ipc_enabled);
   port_layout->addRow(tr("&Port:"), m_spinbox_ipc_port);
   groupbox_layout->addLayout(port_layout);
-  groupbox_layout->addWidget(m_label_ipc_cli_override);
+
+  if (m_ipc_cli_override)
+  {
+    auto* label = new QLabel(
+        tr("Currently overridden by --ipc_port command line argument. "
+           "Changes will take effect on next launch."));
+    label->setWordWrap(true);
+    groupbox_layout->addWidget(label);
+  }
 }
 
 void InterfacePane::ConnectLayout()
@@ -309,10 +303,15 @@ void InterfacePane::ConnectLayout()
           &Settings::CursorVisibilityChanged);
   connect(m_checkbox_lock_mouse, &QCheckBox::toggled, &Settings::Instance(),
           &Settings::LockCursorChanged);
-  connect(m_checkbox_ipc_enabled, &QCheckBox::toggled, &Settings::Instance(),
-          &Settings::IPCServerSettingChanged);
-  connect(m_spinbox_ipc_port, &QSpinBox::valueChanged, &Settings::Instance(),
-          &Settings::IPCServerSettingChanged);
+  // When CLI overrides IPC settings, skip runtime signals — CommandLine layer takes
+  // priority so toggling the checkbox wouldn't change the running server anyway.
+  if (!m_ipc_cli_override)
+  {
+    connect(m_checkbox_ipc_enabled, &QCheckBox::toggled, &Settings::Instance(),
+            &Settings::IPCServerSettingChanged);
+    connect(m_spinbox_ipc_port, &QSpinBox::valueChanged, &Settings::Instance(),
+            &Settings::IPCServerSettingChanged);
+  }
 }
 
 void InterfacePane::UpdateShowDebuggingCheckbox()

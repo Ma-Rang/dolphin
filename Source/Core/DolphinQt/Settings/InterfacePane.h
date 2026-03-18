@@ -64,5 +64,5 @@ private:
 
   ConfigBool* m_checkbox_ipc_enabled;
   ConfigInteger* m_spinbox_ipc_port;
-  QLabel* m_label_ipc_cli_override;
+  bool m_ipc_cli_override = false;
 };

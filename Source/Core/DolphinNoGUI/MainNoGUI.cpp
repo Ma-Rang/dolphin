@@ -6,6 +6,7 @@
 #include <OptionParser.h>
 #include <csignal>
 #include <cstdio>
+#include <mutex>
 #include <fmt/format.h>
 #include <string>
 #include <vector>
@@ -36,6 +37,9 @@
 
 static std::unique_ptr<Platform> s_platform;
 static std::unique_ptr<DolphinIPC::Server> s_ipc_server;
+static WindowSystemInfo s_wsi;
+static std::unique_ptr<BootParameters> s_pending_boot;
+static std::mutex s_pending_boot_mutex;
 
 static void signal_handler(int)
 {
@@ -72,7 +76,14 @@ bool Host_UIBlocksControllerState()
 void Host_Message(const HostMessageID id)
 {
   if (id == HostMessageID::WMUserStop)
-    s_platform->Stop();
+  {
+    // Do NOT call s_platform->Stop() here.  WMUserStop fires during the
+    // shutdown sequence *before* the state reaches Uninitialized.  The
+    // state change callback (at Uninitialized) decides whether to keep
+    // the process alive (GameSwitching/Always) or exit (EmulationOnly).
+    // Calling Stop() here in any mode would race with the state callback
+    // and could prevent pending boots from executing.
+  }
 }
 
 void Host_UpdateTitle(const std::string& title)
@@ -163,32 +174,53 @@ static void InitIPCServer(u16 port)
 
   DolphinIPC::FrontendCallbacks frontend;
 
-  // Boot game — stop current emulation if running, then boot.
-  // Note: game switching (stop + reboot) is not yet supported in NoGUI.
-  // For now, boot only works when emulation is not running.
+  // Boot game — if emulation is active (running, starting, or still stopping),
+  // queue a pending boot.  The state change callback picks it up once the
+  // previous session is fully torn down (State::Uninitialized).
   frontend.boot_game = [&system](const std::string& path) {
     auto boot = BootParameters::GenerateFromFile(path);
     if (!boot)
       return;
-    if (Core::IsRunning(system))
+    if (!Core::IsUninitialized(system))
     {
-      Core::Stop(system);
-      return;
+      std::lock_guard lock(s_pending_boot_mutex);
+      s_pending_boot = std::move(boot);
+      if (Core::IsRunning(system))
+        Core::Stop(system);
     }
-    // WSI not available here — NoGUI boot_game only works at startup via CLI.
+    else
+    {
+      BootManager::BootCore(system, std::move(boot), s_wsi);
+    }
   };
 
   frontend.boot_nand = [&system](u64 title_id) {
-    if (Core::IsRunning(system))
+    auto boot = std::make_unique<BootParameters>(BootParameters::NANDTitle{title_id});
+    if (!Core::IsUninitialized(system))
     {
-      Core::Stop(system);
-      return;
+      std::lock_guard lock(s_pending_boot_mutex);
+      s_pending_boot = std::move(boot);
+      if (Core::IsRunning(system))
+        Core::Stop(system);
+    }
+    else
+    {
+      BootManager::BootCore(system, std::move(boot), s_wsi);
     }
   };
 
   frontend.force_stop = [&system]() {
     if (Core::IsRunning(system))
-      Core::Stop(system);
+    {
+      // Must run on the host thread — Core::Stop() blocks waiting for the
+      // CPU thread, which may itself be waiting for a host job dispatch.
+      // Calling Core::Stop() from the IPC thread deadlocks.
+      Core::QueueHostJob([](Core::System& sys) { Core::Stop(sys); });
+    }
+  };
+
+  frontend.exit_app = []() {
+    s_platform->RequestShutdown();
   };
 
   frontend.fullscreen_toggle = []() -> std::string {
@@ -340,11 +372,11 @@ int main(const int argc, char* argv[])
     return 1;
   }
 
-  const WindowSystemInfo wsi = s_platform->GetWindowSystemInfo();
+  s_wsi = s_platform->GetWindowSystemInfo();
 
   UICommon::SetUserDirectory(user_directory);
   UICommon::Init();
-  UICommon::InitControllers(wsi);
+  UICommon::InitControllers(s_wsi);
 
   Common::ScopeGuard ui_common_guard([] {
     UICommon::ShutdownControllers();
@@ -357,14 +389,7 @@ int main(const int argc, char* argv[])
     return 1;
   }
 
-  // Set up IPC server via CLI override or config.
-  const int cli_ipc_port = static_cast<int>(options.get("ipc_port"));
-  if (cli_ipc_port > 0)
-  {
-    Config::SetCurrent(Config::MAIN_IPC_SERVER_ENABLED, true);
-    Config::SetCurrent(Config::MAIN_IPC_SERVER_PORT, cli_ipc_port);
-  }
-
+  // IPC server — CLI sets CommandLine layer via CommandLineParse, config has Base layer.
   const bool ipc_enabled = Config::Get(Config::MAIN_IPC_SERVER_ENABLED);
   if (ipc_enabled)
   {
@@ -373,8 +398,38 @@ int main(const int argc, char* argv[])
   }
 
   auto core_state_changed_hook = Core::AddOnStateChangedCallback([](const Core::State state) {
-    if (state == Core::State::Uninitialized)
+    if (state != Core::State::Uninitialized)
+      return;
+
+    // Check for a pending boot (game switching via IPC).
+    std::unique_ptr<BootParameters> pending;
+    {
+      std::lock_guard lock(s_pending_boot_mutex);
+      pending = std::move(s_pending_boot);
+    }
+
+    if (pending)
+    {
+      // Reboot into the next game.  This callback runs on the EmuThread
+      // (inside a scope guard), so we can't call BootCore() directly —
+      // Core::Init() would deadlock trying to join the current thread.
+      // Defer to the main thread via QueueHostJob (run_after_stop=true
+      // so it executes even though emulation has stopped).  MainLoop's
+      // HostDispatchJobs() picks it up on the next iteration.
+      auto shared_boot = std::make_shared<std::unique_ptr<BootParameters>>(std::move(pending));
+      Core::QueueHostJob(
+          [shared_boot](Core::System&) {
+            BootManager::BootCore(Core::System::GetInstance(), std::move(*shared_boot), s_wsi);
+          },
+          true);
+    }
+    else
+    {
+      // No pending boot — exit the process.  Window persistence only
+      // matters *during* a game switch (pending boot case above).
+      // There's no value in keeping a headless process alive idle.
       s_platform->Stop();
+    }
   });
 
 #ifdef _WIN32
@@ -392,7 +447,7 @@ int main(const int argc, char* argv[])
 
   DolphinAnalytics::Instance().ReportDolphinStart("nogui");
 
-  if (!BootManager::BootCore(Core::System::GetInstance(), std::move(boot), wsi))
+  if (!BootManager::BootCore(Core::System::GetInstance(), std::move(boot), s_wsi))
   {
     fprintf(stderr, "Could not boot the specified file\n");
     return 1;

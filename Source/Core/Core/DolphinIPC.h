@@ -73,6 +73,9 @@ struct FrontendCallbacks
 
   // List games from the frontend's game cache (Qt only; NoGUI returns ERR).
   std::function<std::string()> list_games;
+
+  // Exit the application entirely (stop emulation + close window/process).
+  std::function<void()> exit_app;
 };
 
 // Callback interface for handling IPC commands.
@@ -147,6 +150,9 @@ struct CommandHandler
   // Pause / resume emulation
   std::function<std::string()> on_pause;
   std::function<std::string()> on_resume;
+
+  // Exit the application
+  std::function<std::string()> on_exit;
 
   // TAS movie commands
   std::function<std::string(const std::string& path)> on_play_movie;

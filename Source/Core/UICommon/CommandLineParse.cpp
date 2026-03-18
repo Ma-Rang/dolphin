@@ -22,7 +22,8 @@ class CommandLineConfigLayerLoader final : public Config::ConfigLayerLoader
 {
 public:
   CommandLineConfigLayerLoader(const std::list<std::string>& args, const std::string& video_backend,
-                               const std::string& audio_backend, bool batch, bool debugger)
+                               const std::string& audio_backend, bool batch, bool debugger,
+                               int ipc_port)
       : ConfigLayerLoader(Config::LayerType::CommandLine)
   {
     if (!video_backend.empty())
@@ -41,6 +42,12 @@ public:
 
     if (debugger)
       m_values.emplace_back(Config::MAIN_ENABLE_DEBUGGING.GetLocation(), ValueToString(true));
+
+    if (ipc_port > 0)
+    {
+      m_values.emplace_back(Config::MAIN_IPC_SERVER_ENABLED.GetLocation(), ValueToString(true));
+      m_values.emplace_back(Config::MAIN_IPC_SERVER_PORT.GetLocation(), ValueToString(ipc_port));
+    }
 
     // Arguments are in the format of <System>.<Section>.<Key>=Value
     for (const auto& arg : args)
@@ -144,7 +151,8 @@ static void AddConfigLayer(const optparse::Values& options)
   Config::AddLayer(std::make_unique<CommandLineConfigLayerLoader>(
       std::move(config_args), static_cast<const char*>(options.get("video_backend")),
       static_cast<const char*>(options.get("audio_emulation")),
-      static_cast<bool>(options.get("batch")), static_cast<bool>(options.get("debugger"))));
+      static_cast<bool>(options.get("batch")), static_cast<bool>(options.get("debugger")),
+      static_cast<int>(options.get("ipc_port"))));
 }
 
 optparse::Values& ParseArguments(optparse::OptionParser* parser, int argc, char** argv)

@@ -20,7 +20,9 @@
 #include <picojson.h>
 
 #include "AudioCommon/AudioCommon.h"
+#include "Common/CommonPaths.h"
 #include "Common/CommonTypes.h"
+#include "Common/FileUtil.h"
 #include "Common/Config/Config.h"
 #include "Common/Config/Layer.h"
 #include "Common/Logging/Log.h"
@@ -498,9 +500,11 @@ static std::string HandleGetSystemInfo()
 #endif
 
   const std::string backend = Config::Get(Config::MAIN_GFX_BACKEND);
-  return fmt::format("OK VERSION:{} BRANCH:{} REVISION:{} OS:{} IPC_VERSION:{} BACKEND:{}",
-                     Common::GetScmDescStr(), Common::GetScmBranchStr(), Common::GetScmRevStr(),
-                     os_name, PROTOCOL_VERSION, backend);
+  const std::string user_dir = File::GetUserPath(D_USER_IDX);
+  return fmt::format(
+      "OK VERSION:{} BRANCH:{} REVISION:{} OS:{} IPC_VERSION:{} BACKEND:{} USER_DIR:{}",
+      Common::GetScmDescStr(), Common::GetScmBranchStr(), Common::GetScmRevStr(), os_name,
+      PROTOCOL_VERSION, backend, user_dir);
 }
 
 static std::string HandleSetVolume(Core::System& system, int volume)
@@ -882,6 +886,15 @@ CommandHandler CreateHandlers(Core::System& system, FrontendCallbacks frontend)
     return "OK";
   };
 
+  handler.on_exit = [exit_fn = std::move(frontend.exit_app),
+                     stop_fn = handler.on_stop]() -> std::string {
+    if (stop_fn)
+      stop_fn();
+    if (exit_fn)
+      exit_fn();
+    return "OK";
+  };
+
   handler.on_fullscreen_toggle = std::move(frontend.fullscreen_toggle);
 
   handler.on_get_fullscreen = [is_fs = frontend.is_fullscreen]() -> std::string {
@@ -1121,6 +1134,14 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
     if (!handler.on_stop)
       return JsonError("Not implemented").serialize();
     handler.on_stop();
+    return JsonOk().serialize();
+  }
+  // --- exit ---
+  else if (c == "exit")
+  {
+    if (!handler.on_exit)
+      return JsonError("Not implemented").serialize();
+    handler.on_exit();
     return JsonOk().serialize();
   }
   // --- get_config ---
@@ -1515,8 +1536,8 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
     picojson::object info;
     info.emplace("ok", picojson::value(true));
     const std::string payload = result.substr(3);  // skip "OK "
-    const std::vector<std::string> keys = {"VERSION", "BRANCH", "REVISION",
-                                           "OS",      "IPC_VERSION", "BACKEND"};
+    const std::vector<std::string> keys = {"VERSION",  "BRANCH",      "REVISION", "OS",
+                                           "IPC_VERSION", "BACKEND", "USER_DIR"};
     for (size_t i = 0; i < keys.size(); ++i)
     {
       const std::string prefix = keys[i] + ":";
@@ -1834,7 +1855,21 @@ struct Server::ClientConnection
     if (!running.load())
       return;
     std::string line = message + "\n";
-    [[maybe_unused]] auto status = socket->send(line.data(), line.size());
+    const char* ptr = line.data();
+    std::size_t remaining = line.size();
+    while (remaining > 0)
+    {
+      std::size_t sent = 0;
+      auto status = socket->send(ptr, remaining, sent);
+      if (status == sf::Socket::Status::Disconnected ||
+          status == sf::Socket::Status::Error)
+      {
+        running.store(false);
+        return;
+      }
+      ptr += sent;
+      remaining -= sent;
+    }
   }
 };
 

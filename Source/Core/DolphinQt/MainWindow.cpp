@@ -396,22 +396,46 @@ void MainWindow::InitIPCServer(u16 port)
 {
   DolphinIPC::FrontendCallbacks frontend;
 
-  // Boot game — dispatch to Qt main thread. StartGame handles stop-then-boot
-  // via m_pending_boot internally (RequestStop + queue).
+  // Boot game — dispatch to Qt main thread.
+  // Use ForceStop (not RequestStop) when a game is already running.
+  // RequestStop sends STM power events that hang/crash homebrew DOLs
+  // (WiiFlow, launcher channels, cubeboot).
   frontend.boot_game = [this](const std::string& path) {
     QueueOnObject(this, [this, path]() {
-      StartGame(BootParameters::GenerateFromFile(path));
+      auto params = BootParameters::GenerateFromFile(path);
+      if (!Core::IsUninitialized(m_system))
+      {
+        m_pending_boot = std::move(params);
+        ForceStop();
+        return;
+      }
+      StartGame(std::move(params));
     });
   };
 
   frontend.boot_nand = [this](u64 title_id) {
     QueueOnObject(this, [this, title_id]() {
-      StartGame(std::make_unique<BootParameters>(BootParameters::NANDTitle{title_id}));
+      auto params = std::make_unique<BootParameters>(BootParameters::NANDTitle{title_id});
+      if (!Core::IsUninitialized(m_system))
+      {
+        m_pending_boot = std::move(params);
+        ForceStop();
+        return;
+      }
+      StartGame(std::move(params));
     });
   };
 
   frontend.force_stop = [this]() {
     QueueOnObject(this, [this]() { ForceStop(); });
+  };
+
+  frontend.exit_app = [this]() {
+    QueueOnObject(this, [this]() {
+      m_exit_requested = true;
+      ForceStop();
+      close();
+    });
   };
 
   frontend.fullscreen_toggle = [this]() -> std::string {
