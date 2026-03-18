@@ -55,7 +55,9 @@ private:
   ConfigBool* m_checkbox_use_panic_handlers;
   ConfigBool* m_checkbox_show_active_title;
   ConfigBool* m_checkbox_pause_on_focus_lost;
-  ConfigBool* m_checkbox_persistent_render_window;
+  ConfigRadioInt* m_radio_render_emulation_only;
+  ConfigRadioInt* m_radio_render_game_switching;
+  ConfigRadioInt* m_radio_render_always;
   ConfigRadioInt* m_radio_cursor_visible_movement;
   ConfigRadioInt* m_radio_cursor_visible_never;
   ConfigRadioInt* m_radio_cursor_visible_always;

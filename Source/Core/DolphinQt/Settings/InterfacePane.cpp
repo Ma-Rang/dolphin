@@ -204,8 +204,33 @@ void InterfacePane::CreateInGame()
       new ConfigBool(tr("Show Active Title in Window Title"), Config::MAIN_SHOW_ACTIVE_TITLE);
   m_checkbox_pause_on_focus_lost =
       new ConfigBool(tr("Pause on Focus Loss"), Config::MAIN_PAUSE_ON_FOCUS_LOST);
-  m_checkbox_persistent_render_window =
-      new ConfigBool(tr("Keep Render Window Open"), Config::MAIN_PERSISTENT_RENDER_WINDOW);
+  auto* render_groupbox = new QGroupBox(tr("Render Window Visibility"));
+  auto* render_layout = new QVBoxLayout;
+  render_groupbox->setLayout(render_layout);
+
+  m_radio_render_emulation_only = new ConfigRadioInt(
+      tr("Only while running"), Config::MAIN_RENDER_WINDOW_PERSISTENCE,
+      static_cast<int>(Config::RenderWindowPersistence::EmulationOnly));
+  m_radio_render_game_switching = new ConfigRadioInt(
+      tr("Keep open during game switching"), Config::MAIN_RENDER_WINDOW_PERSISTENCE,
+      static_cast<int>(Config::RenderWindowPersistence::GameSwitching));
+  m_radio_render_always = new ConfigRadioInt(
+      tr("Keep open always"), Config::MAIN_RENDER_WINDOW_PERSISTENCE,
+      static_cast<int>(Config::RenderWindowPersistence::Always));
+
+  render_layout->addWidget(m_radio_render_emulation_only);
+  render_layout->addWidget(m_radio_render_game_switching);
+  render_layout->addWidget(m_radio_render_always);
+
+  if (Config::GetActiveLayerForConfig(Config::MAIN_RENDER_WINDOW_PERSISTENCE) ==
+      Config::LayerType::CommandLine)
+  {
+    auto* label = new QLabel(
+        tr("Currently overridden by --render_visibility command line argument. "
+           "Changes will take effect on next launch."));
+    label->setWordWrap(true);
+    render_layout->addWidget(label);
+  }
 
   auto* mouse_groupbox = new QGroupBox(tr("Mouse Cursor Visibility"));
   auto* m_vboxlayout_hide_mouse = new QVBoxLayout;
@@ -233,7 +258,7 @@ void InterfacePane::CreateInGame()
   groupbox_layout->addWidget(m_checkbox_use_panic_handlers);
   groupbox_layout->addWidget(m_checkbox_show_active_title);
   groupbox_layout->addWidget(m_checkbox_pause_on_focus_lost);
-  groupbox_layout->addWidget(m_checkbox_persistent_render_window);
+  groupbox_layout->addWidget(render_groupbox);
   groupbox_layout->addWidget(mouse_groupbox);
 #ifdef _WIN32
   groupbox_layout->addWidget(m_checkbox_lock_mouse);
@@ -378,11 +403,20 @@ void InterfacePane::AddDescriptions()
   static constexpr char TR_PAUSE_ON_FOCUS_LOST_DESCRIPTION[] =
       QT_TR_NOOP("Pauses the game whenever the render window isn't focused."
                  "<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>");
-  static constexpr char TR_PERSISTENT_RENDER_WINDOW_DESCRIPTION[] =
-      QT_TR_NOOP("Keeps the render window open and visible at all times while Dolphin is running. "
-                 "When no game is active, the window shows a black screen. This avoids window "
-                 "flashing when switching between games."
-                 "<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>");
+  static constexpr char TR_RENDER_EMULATION_ONLY_DESCRIPTION[] = QT_TR_NOOP(
+      "The render window is created when a game starts and destroyed when it stops. "
+      "This is the default Dolphin behavior."
+      "<br><br><dolphin_emphasis>If unsure, leave this selected.</dolphin_emphasis>");
+  static constexpr char TR_RENDER_GAME_SWITCHING_DESCRIPTION[] = QT_TR_NOOP(
+      "The render window stays open between game switches to avoid window flashing. "
+      "When emulation stops without another game queued, the window closes normally. "
+      "Recommended for frontends and automated game switching."
+      "<br><br><dolphin_emphasis>If unsure, leave this unselected.</dolphin_emphasis>");
+  static constexpr char TR_RENDER_ALWAYS_DESCRIPTION[] = QT_TR_NOOP(
+      "The render window is shown at startup and stays open at all times. "
+      "When no game is active, the window shows a black screen. "
+      "Recommended for kiosk and HTPC setups."
+      "<br><br><dolphin_emphasis>If unsure, leave this unselected.</dolphin_emphasis>");
   static constexpr char TR_LOCK_MOUSE_DESCRIPTION[] =
       QT_TR_NOOP("Locks the mouse cursor to the Render Widget as long as it has focus. You can "
                  "set a hotkey to unlock it."
@@ -428,8 +462,9 @@ void InterfacePane::AddDescriptions()
 
   m_checkbox_pause_on_focus_lost->SetDescription(tr(TR_PAUSE_ON_FOCUS_LOST_DESCRIPTION));
 
-  m_checkbox_persistent_render_window->SetDescription(
-      tr(TR_PERSISTENT_RENDER_WINDOW_DESCRIPTION));
+  m_radio_render_emulation_only->SetDescription(tr(TR_RENDER_EMULATION_ONLY_DESCRIPTION));
+  m_radio_render_game_switching->SetDescription(tr(TR_RENDER_GAME_SWITCHING_DESCRIPTION));
+  m_radio_render_always->SetDescription(tr(TR_RENDER_ALWAYS_DESCRIPTION));
 
   m_checkbox_lock_mouse->SetDescription(tr(TR_LOCK_MOUSE_DESCRIPTION));
 

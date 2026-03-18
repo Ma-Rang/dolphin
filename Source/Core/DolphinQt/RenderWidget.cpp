@@ -49,6 +49,27 @@ public:
     setAttribute(Qt::WA_NativeWindow);
     setAttribute(Qt::WA_PaintOnScreen);
   }
+
+#ifdef _WIN32
+  bool nativeEvent(const QByteArray& eventType, void* message, qintptr* result) override
+  {
+    // Paint the native window black so there's no white flash before
+    // the video backend starts rendering.  WA_PaintOnScreen prevents Qt
+    // from painting, so we handle WM_ERASEBKGND at the Win32 level.
+    MSG* msg = static_cast<MSG*>(message);
+    if (msg->message == WM_ERASEBKGND)
+    {
+      RECT rc;
+      GetClientRect(msg->hwnd, &rc);
+      FillRect(reinterpret_cast<HDC>(msg->wParam), &rc,
+               static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+      *result = 1;
+      return true;
+    }
+    return QWidget::nativeEvent(eventType, message, result);
+  }
+#endif
+
   QPaintEngine* paintEngine() const override { return nullptr; }
 };
 }  // namespace

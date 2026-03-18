@@ -324,9 +324,9 @@ MainWindow::MainWindow(Core::System& system, std::unique_ptr<BootParameters> boo
 
   Host::GetInstance()->SetMainWindowHandle(reinterpret_cast<void*>(winId()));
 
-  // If persistent render is enabled and we're not rendering to main,
-  // show the render window immediately (even without a game running).
-  if (Config::Get(Config::MAIN_PERSISTENT_RENDER_WINDOW) &&
+  // In "Always" mode, show the render window at startup (even without a game).
+  if (Config::Get(Config::MAIN_RENDER_WINDOW_PERSISTENCE) ==
+          Config::RenderWindowPersistence::Always &&
       !Config::Get(Config::MAIN_RENDER_TO_MAIN) && m_pending_boot == nullptr)
   {
     ShowRenderWidget();
@@ -908,11 +908,13 @@ void MainWindow::OnStopComplete()
 {
   m_stop_requested = false;
 
-  // If a pending boot is queued and persistent render is enabled, recreate just
+  const auto persist_mode = Config::Get(Config::MAIN_RENDER_WINDOW_PERSISTENCE);
+
+  // If a pending boot is queued and render persistence is enabled, recreate just
   // the render surface (child widget) to give D3D a fresh HWND, then boot
   // immediately.  The outer RenderWidget stays alive — no window flash.
   if (m_pending_boot != nullptr &&
-      Config::Get(Config::MAIN_PERSISTENT_RENDER_WINDOW))
+      persist_mode != Config::RenderWindowPersistence::EmulationOnly)
   {
     const bool was_fullscreen = m_render_widget->isFullScreen();
 
@@ -935,14 +937,12 @@ void MainWindow::OnStopComplete()
     return;
   }
 
-  // When persistent render is enabled, not exiting, and using an external window
-  // (not render-to-main), skip destroying the render widget — leave it open.
-  // In render-to-main mode, we must hide the widget to reveal the game list.
-  if (Config::Get(Config::MAIN_PERSISTENT_RENDER_WINDOW) && !m_exit_requested &&
+  // In "Always" mode, keep the render widget open even with no pending boot.
+  // Destroy just the render surface so the parent's black background shows.
+  // In "GameSwitching" mode (with no pending boot) or "EmulationOnly", close normally.
+  if (persist_mode == Config::RenderWindowPersistence::Always && !m_exit_requested &&
       !m_rendering_to_main)
   {
-    // Destroy the render surface child so the parent's black background shows
-    // instead of the last rendered frame.
     m_render_widget->DestroySurface();
   }
   else

@@ -23,7 +23,7 @@ class CommandLineConfigLayerLoader final : public Config::ConfigLayerLoader
 public:
   CommandLineConfigLayerLoader(const std::list<std::string>& args, const std::string& video_backend,
                                const std::string& audio_backend, bool batch, bool debugger,
-                               bool persistent_render)
+                               const std::string& render_visibility)
       : ConfigLayerLoader(Config::LayerType::CommandLine)
   {
     if (!video_backend.empty())
@@ -43,9 +43,16 @@ public:
     if (debugger)
       m_values.emplace_back(Config::MAIN_ENABLE_DEBUGGING.GetLocation(), ValueToString(true));
 
-    if (persistent_render)
-      m_values.emplace_back(Config::MAIN_PERSISTENT_RENDER_WINDOW.GetLocation(),
-                            ValueToString(true));
+    if (!render_visibility.empty())
+    {
+      int val = static_cast<int>(Config::RenderWindowPersistence::EmulationOnly);
+      if (render_visibility == "switching")
+        val = static_cast<int>(Config::RenderWindowPersistence::GameSwitching);
+      else if (render_visibility == "always")
+        val = static_cast<int>(Config::RenderWindowPersistence::Always);
+      m_values.emplace_back(Config::MAIN_RENDER_WINDOW_PERSISTENCE.GetLocation(),
+                            ValueToString(val));
+    }
 
     // Arguments are in the format of <System>.<Section>.<Key>=Value
     for (const auto& arg : args)
@@ -121,13 +128,18 @@ std::unique_ptr<optparse::OptionParser> CreateParser(ParserOptions options)
         .action("store_true")
         .help("Run Dolphin without the user interface (Requires --exec or --nand-title)");
     parser->add_option("-c", "--confirm").action("store_true").help("Set Confirm on Stop");
-    parser->add_option("--persistent-render")
-        .action("store_true")
-        .help("Keep the render window open at all times");
   }
+
+  parser->add_option("--render_visibility")
+      .action("store")
+      .choices({"running", "switching", "always"})
+      .help("Render window visibility: running (only while running), "
+            "switching (keep open during game switching), "
+            "always (keep open at all times)");
 
   parser->set_defaults("video_backend", "");
   parser->set_defaults("audio_emulation", "");
+  parser->set_defaults("render_visibility", "");
   parser->add_option("-v", "--video_backend").action("store").help("Specify a video backend");
   parser->add_option("-a", "--audio_emulation")
       .choices({"HLE", "LLE"})
@@ -146,7 +158,7 @@ static void AddConfigLayer(const optparse::Values& options)
       std::move(config_args), static_cast<const char*>(options.get("video_backend")),
       static_cast<const char*>(options.get("audio_emulation")),
       static_cast<bool>(options.get("batch")), static_cast<bool>(options.get("debugger")),
-      static_cast<bool>(options.get("persistent_render"))));
+      static_cast<const char*>(options.get("render_visibility"))));
 }
 
 optparse::Values& ParseArguments(optparse::OptionParser* parser, int argc, char** argv)
