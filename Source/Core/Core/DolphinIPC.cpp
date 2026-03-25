@@ -304,118 +304,6 @@ static std::string HandleGCAdapterStatus()
   return "OK NOT_DETECTED";
 }
 
-static std::string HandleScanGame(const std::string& b64path)
-{
-  const std::string path = DecodeBase64(b64path);
-  if (path.empty())
-    return "ERR Invalid base64 path";
-
-  auto volume = DiscIO::CreateVolume(path);
-  if (!volume)
-    return "ERR Could not open disc image";
-
-  const DiscIO::Partition partition = volume->GetGamePartition();
-  const std::string game_id = volume->GetGameID(partition);
-  const std::string internal_name = volume->GetInternalName(partition);
-  const std::string maker_id = volume->GetMakerID(partition);
-  const DiscIO::Region region = volume->GetRegion();
-  const DiscIO::Platform platform = volume->GetVolumeType();
-  const std::optional<u8> disc_number = volume->GetDiscNumber(partition);
-  const std::optional<u16> revision = volume->GetRevision(partition);
-
-  // Try to get a localized title from banner; fall back to internal name.
-  std::string title = internal_name;
-  const auto long_names = volume->GetLongNames();
-  if (!long_names.empty())
-  {
-    auto it = long_names.find(DiscIO::Language::English);
-    if (it == long_names.end())
-      it = long_names.begin();
-    if (!it->second.empty())
-      title = it->second;
-  }
-
-  // Resolve maker ID to a human-readable company name.
-  const std::string& maker = DiscIO::GetCompanyFromID(maker_id);
-
-  const char* region_str = "UNKNOWN";
-  switch (region)
-  {
-  case DiscIO::Region::NTSC_J:
-    region_str = "NTSC_J";
-    break;
-  case DiscIO::Region::NTSC_U:
-    region_str = "NTSC_U";
-    break;
-  case DiscIO::Region::PAL:
-    region_str = "PAL";
-    break;
-  case DiscIO::Region::NTSC_K:
-    region_str = "NTSC_K";
-    break;
-  default:
-    break;
-  }
-
-  const char* platform_str = "UNKNOWN";
-  switch (platform)
-  {
-  case DiscIO::Platform::GameCubeDisc:
-    platform_str = "GC";
-    break;
-  case DiscIO::Platform::WiiDisc:
-    platform_str = "WII";
-    break;
-  case DiscIO::Platform::WiiWAD:
-    platform_str = "WAD";
-    break;
-  default:
-    break;
-  }
-
-  return fmt::format(
-      "OK GAME_ID:{} TITLE:{} REGION:{} PLATFORM:{} DISC_NUMBER:{} REVISION:{} MAKER_ID:{} "
-      "MAKER:{}",
-      game_id, title, region_str, platform_str, disc_number.value_or(0),
-      revision.value_or(0), maker_id, maker);
-}
-
-static std::string HandleGetBanner(const std::string& b64path)
-{
-  const std::string path = DecodeBase64(b64path);
-  if (path.empty())
-    return "ERR Invalid base64 path";
-
-  auto volume = DiscIO::CreateVolume(path);
-  if (!volume)
-    return "ERR Could not open disc image";
-
-  const DiscIO::Partition partition = volume->GetGamePartition();
-  const DiscIO::FileSystem* fs = volume->GetFileSystem(partition);
-  if (!fs || !fs->IsValid())
-    return "ERR Could not read disc filesystem";
-
-  auto file_info = fs->FindFileInfo("opening.bnr");
-  if (!file_info)
-    return "ERR No banner found";
-
-  const u32 file_size = file_info->GetSize();
-  if (file_size == 0)
-    return "ERR Banner file is empty";
-
-  // Read banner data from disc.
-  std::vector<u8> banner_data(file_size);
-  const u64 bytes_read =
-      DiscIO::ReadFile(*volume, partition, file_info.get(), banner_data.data(), file_size);
-  if (bytes_read != file_size)
-    return "ERR Failed to read banner data";
-
-  std::string b64 = EncodeBase64(banner_data.data(), banner_data.size());
-  if (b64.empty())
-    return "ERR Base64 encoding failed";
-
-  return "OK " + b64;
-}
 
 // ---------------------------------------------------------------------------
 // v1 expansion handlers — save states, screenshot, system info, volume,
@@ -931,9 +819,6 @@ CommandHandler CreateHandlers(Core::System& system, FrontendCallbacks frontend)
   };
   handler.on_gc_adapter_status = []() { return HandleGCAdapterStatus(); };
 
-  handler.on_scan_game = [](const std::string& b64path) { return HandleScanGame(b64path); };
-  handler.on_get_banner = [](const std::string& b64path) { return HandleGetBanner(b64path); };
-
   // --- v1 expansion: save states, screenshot, system info, volume, config, speed, gecko ---
 
   handler.on_save_state = [&system](int slot) { return HandleSaveState(system, slot); };
@@ -1358,79 +1243,6 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
     if (result.find("NOT_DETECTED ") != std::string::npos)
       out.emplace("message", picojson::value(result.substr(result.find("NOT_DETECTED ") + 13)));
     return picojson::value(out).serialize();
-  }
-  // --- scan_game ---
-  else if (c == "scan_game")
-  {
-    const auto path = JsonGetString(obj, "path");
-    if (!path)
-      return JsonError("Missing \"path\" field").serialize();
-    if (!handler.on_scan_game)
-      return JsonError("Not implemented").serialize();
-    std::string b64 = EncodeBase64(reinterpret_cast<const u8*>(path->data()), path->size());
-    const std::string result = handler.on_scan_game(b64);
-    if (result.substr(0, 3) != "OK ")
-      return JsonError(result.substr(0, 4) == "ERR " ? result.substr(4) : result).serialize();
-    // Parse "OK GAME_ID:xxx TITLE:yyy ..." into JSON object.
-    picojson::object game;
-    game.emplace("ok", picojson::value(true));
-    // Use regex-like parsing to extract KEY:VALUE pairs.
-    const std::string payload = result.substr(3);
-    // Match keys: GAME_ID, TITLE, REGION, PLATFORM, DISC_NUMBER, REVISION
-    const std::vector<std::string> keys = {"GAME_ID",    "TITLE",    "REGION",  "PLATFORM",
-                                           "DISC_NUMBER", "REVISION", "MAKER_ID", "MAKER"};
-    for (size_t i = 0; i < keys.size(); ++i)
-    {
-      const std::string prefix = keys[i] + ":";
-      size_t start = payload.find(prefix);
-      if (start == std::string::npos)
-        continue;
-      start += prefix.size();
-      // Value runs until the next KEY: or end of string.
-      size_t end = std::string::npos;
-      for (size_t j = i + 1; j < keys.size(); ++j)
-      {
-        size_t next = payload.find(" " + keys[j] + ":", start);
-        if (next != std::string::npos)
-        {
-          end = next;
-          break;
-        }
-      }
-      std::string value = (end != std::string::npos) ? payload.substr(start, end - start)
-                                                     : payload.substr(start);
-      // Trim trailing whitespace.
-      while (!value.empty() && value.back() == ' ')
-        value.pop_back();
-      // Convert snake_case key name for JSON.
-      std::string json_key = keys[i];
-      std::transform(json_key.begin(), json_key.end(), json_key.begin(), ::tolower);
-      // disc_number and revision as numbers.
-      if (keys[i] == "DISC_NUMBER" || keys[i] == "REVISION")
-      {
-        const auto num = ParseInt(value);
-        game.emplace(json_key, picojson::value(static_cast<double>(num.value_or(0))));
-      }
-      else
-      {
-        game.emplace(json_key, picojson::value(value));
-      }
-    }
-    return picojson::value(game).serialize();
-  }
-  // --- get_banner ---
-  else if (c == "get_banner")
-  {
-    const auto path = JsonGetString(obj, "path");
-    if (!path)
-      return JsonError("Missing \"path\" field").serialize();
-    if (!handler.on_get_banner)
-      return JsonError("Not implemented").serialize();
-    std::string b64 = EncodeBase64(reinterpret_cast<const u8*>(path->data()), path->size());
-    const std::string result = handler.on_get_banner(b64);
-    if (result.substr(0, 3) == "OK ")
-      return JsonOkWith("data", picojson::value(result.substr(3))).serialize();
-    return JsonError(result.substr(0, 4) == "ERR " ? result.substr(4) : result).serialize();
   }
   // --- v1 expansion: save states ---
   else if (c == "save_state")
@@ -2217,22 +2029,6 @@ std::string Server::HandleCommand(const std::string& line)
   {
     if (m_handler.on_gc_adapter_status)
       return m_handler.on_gc_adapter_status();
-    return "ERR Not implemented";
-  }
-  else if (verb == "SCAN_GAME")
-  {
-    if (args.empty())
-      return "ERR Missing path argument";
-    if (m_handler.on_scan_game)
-      return m_handler.on_scan_game(args);
-    return "ERR Not implemented";
-  }
-  else if (verb == "GET_BANNER")
-  {
-    if (args.empty())
-      return "ERR Missing path argument";
-    if (m_handler.on_get_banner)
-      return m_handler.on_get_banner(args);
     return "ERR Not implemented";
   }
   else if (verb == "LIST_TITLES")

@@ -98,8 +98,6 @@ The following tables document every command. The "Requires" column indicates whe
 |---|---|---|---|
 | `change_disc` | `path` (string) | `{"ok":true}` | Requires running. |
 | `eject_disc` | none | `{"ok":true}` | Requires running. |
-| `scan_game` | `path` (string) | `{"ok":true,"game_id":"...","title":"..."}` | Parses disc metadata without emulation. |
-| `get_banner` | `path` (string) | `{"ok":true,"data":"..."}` | Extracts `opening.bnr` as base64. |
 
 ### NAND management
 

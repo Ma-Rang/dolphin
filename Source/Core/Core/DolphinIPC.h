@@ -104,9 +104,7 @@ struct CommandHandler
   std::function<std::string(int channel, int device_type)> on_gc_change_device;
   std::function<std::string()> on_gc_adapter_status;
 
-  // Disc scanning / NAND queries (no emulation needed)
-  std::function<std::string(const std::string& path)> on_scan_game;
-  std::function<std::string(const std::string& path)> on_get_banner;
+  // NAND queries (no emulation needed)
   std::function<std::string()> on_list_titles;
 
   // Save state handlers
