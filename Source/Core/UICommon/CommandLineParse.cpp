@@ -23,7 +23,7 @@ class CommandLineConfigLayerLoader final : public Config::ConfigLayerLoader
 public:
   CommandLineConfigLayerLoader(const std::list<std::string>& args, const std::string& video_backend,
                                const std::string& audio_backend, bool batch, bool debugger,
-                               const std::string& render_visibility)
+                               const std::string& render_visibility, int ipc_port)
       : ConfigLayerLoader(Config::LayerType::CommandLine)
   {
     if (!video_backend.empty())
@@ -52,6 +52,12 @@ public:
         val = static_cast<int>(Config::RenderWindowPersistence::Always);
       m_values.emplace_back(Config::MAIN_RENDER_WINDOW_PERSISTENCE.GetLocation(),
                             ValueToString(val));
+    }
+
+    if (ipc_port > 0)
+    {
+      m_values.emplace_back(Config::MAIN_IPC_SERVER_ENABLED.GetLocation(), ValueToString(true));
+      m_values.emplace_back(Config::MAIN_IPC_SERVER_PORT.GetLocation(), ValueToString(ipc_port));
     }
 
     // Arguments are in the format of <System>.<Section>.<Key>=Value
@@ -118,6 +124,13 @@ std::unique_ptr<optparse::OptionParser> CreateParser(ParserOptions options)
       .type("string")
       .help("Load the initial save state");
 
+  parser->add_option("--ipc_port")
+      .action("store")
+      .type("int")
+      .set_default(0)
+      .metavar("<port>")
+      .help("Enable the IPC server on the specified TCP port for external control");
+
   if (options == ParserOptions::IncludeGUIOptions)
   {
     parser->add_option("-d", "--debugger")
@@ -158,7 +171,9 @@ static void AddConfigLayer(const optparse::Values& options)
       std::move(config_args), static_cast<const char*>(options.get("video_backend")),
       static_cast<const char*>(options.get("audio_emulation")),
       static_cast<bool>(options.get("batch")), static_cast<bool>(options.get("debugger")),
-      static_cast<const char*>(options.get("render_visibility"))));
+<<<<<<< HEAD
+      static_cast<const char*>(options.get("render_visibility")),
+      static_cast<int>(options.get("ipc_port"))));
 }
 
 optparse::Values& ParseArguments(optparse::OptionParser* parser, int argc, char** argv)

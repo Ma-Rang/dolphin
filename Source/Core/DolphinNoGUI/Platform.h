@@ -17,6 +17,7 @@ public:
   bool IsRunning() const { return m_running.IsSet(); }
   bool IsWindowFocused() const { return m_window_focus; }
   bool IsWindowFullscreen() const { return m_window_fullscreen; }
+  bool IsExitRequested() const { return m_exit_requested.IsSet(); }
 
   virtual bool Init();
   virtual void SetTitle(const std::string& title);
@@ -53,6 +54,7 @@ protected:
   Common::Flag m_running{true};
   Common::Flag m_shutdown_requested{false};
   Common::Flag m_tried_graceful_shutdown{false};
+  Common::Flag m_exit_requested{false};
 
   bool m_window_focus = true;  // Should be made atomic if actually implemented
   bool m_window_fullscreen = false;

@@ -35,6 +35,7 @@
   <Import Project="$(ExternalsDir)cpp-optparse\exports.props" />
   <Import Project="$(ExternalsDir)fmt\exports.props" />
   <Import Project="$(ExternalsDir)glslang\exports.props" />
+  <Import Project="$(ExternalsDir)mbedtls\exports.props" />
   <ItemGroup>
     <ClCompile Include="MainNoGUI.cpp" />
     <ClCompile Include="Platform.cpp" />

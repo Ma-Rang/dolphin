@@ -46,5 +46,6 @@ void Platform::Stop()
 
 void Platform::RequestShutdown()
 {
+  m_exit_requested.Set();
   m_shutdown_requested.Set();
 }

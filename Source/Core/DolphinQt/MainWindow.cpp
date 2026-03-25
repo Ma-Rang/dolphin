@@ -19,6 +19,7 @@
 #include <QWindow>
 
 #include <fmt/format.h>
+#include <picojson.h>
 
 #include <future>
 #include <optional>
@@ -69,8 +70,10 @@
 #include "Core/WiiUtils.h"
 
 #include "DiscIO/DirectoryBlob.h"
+#include "DiscIO/Enums.h"
 #include "DiscIO/NANDImporter.h"
 #include "DiscIO/RiivolutionPatcher.h"
+#include "DiscIO/Volume.h"
 
 #include "DolphinQt/AboutDialog.h"
 #include "DolphinQt/Achievements/AchievementsWindow.h"
@@ -215,6 +218,24 @@ MainWindow::MainWindow(Core::System& system, std::unique_ptr<BootParameters> boo
                        const std::string& movie_path)
     : QMainWindow(nullptr), m_system(system)
 {
+  // Start IPC server if enabled via GUI settings or --ipc_port CLI override
+  if (Config::Get(Config::MAIN_IPC_SERVER_ENABLED))
+    InitIPCServer(static_cast<u16>(Config::Get(Config::MAIN_IPC_SERVER_PORT)));
+
+  // Allow runtime start/stop of IPC server from Settings GUI
+  connect(&Settings::Instance(), &Settings::IPCServerSettingChanged, this, [this]() {
+    const bool enabled = Config::Get(Config::MAIN_IPC_SERVER_ENABLED);
+    if (enabled && !m_ipc_server)
+    {
+      InitIPCServer(static_cast<u16>(Config::Get(Config::MAIN_IPC_SERVER_PORT)));
+    }
+    else if (!enabled && m_ipc_server)
+    {
+      m_ipc_server->Stop();
+      m_ipc_server.reset();
+    }
+  });
+
   setWindowTitle(QString::fromStdString(Common::GetScmRevStr()));
   setWindowIcon(Resources::GetAppIcon());
   setUnifiedTitleAndToolBarOnMac(true);
@@ -341,6 +362,10 @@ MainWindow::MainWindow(Core::System& system, std::unique_ptr<BootParameters> boo
 
 MainWindow::~MainWindow()
 {
+  // Shut down IPC server before anything else
+  if (m_ipc_server)
+    m_ipc_server->Stop();
+
   // Shut down NetPlay first to avoid race condition segfault
   Settings::Instance().ResetNetPlayClient();
   Settings::Instance().ResetNetPlayServer();
@@ -373,6 +398,116 @@ MainWindow::~MainWindow()
   settings.setValue(QStringLiteral("renderwidget/geometry"), m_render_widget_geometry);
 
   Config::Save();
+}
+
+void MainWindow::InitIPCServer(u16 port)
+{
+  DolphinIPC::FrontendCallbacks frontend;
+
+  // Boot game — dispatch to Qt main thread.
+  // Use ForceStop (not RequestStop) when a game is already running.
+  // RequestStop sends STM power events that hang/crash homebrew DOLs
+  // (WiiFlow, launcher channels, cubeboot).
+  frontend.boot_game = [this](const std::string& path) {
+    QueueOnObject(this, [this, path]() {
+      auto params = BootParameters::GenerateFromFile(path);
+      if (!Core::IsUninitialized(m_system))
+      {
+        m_pending_boot = std::move(params);
+        ForceStop();
+        return;
+      }
+      StartGame(std::move(params));
+    });
+  };
+
+  frontend.boot_nand = [this](u64 title_id) {
+    QueueOnObject(this, [this, title_id]() {
+      auto params = std::make_unique<BootParameters>(BootParameters::NANDTitle{title_id});
+      if (!Core::IsUninitialized(m_system))
+      {
+        m_pending_boot = std::move(params);
+        ForceStop();
+        return;
+      }
+      StartGame(std::move(params));
+    });
+  };
+
+  frontend.force_stop = [this]() { QueueOnObject(this, [this]() { ForceStop(); }); };
+
+  frontend.exit_app = [this]() {
+    QueueOnObject(this, [this]() {
+      m_exit_requested = true;
+      ForceStop();
+      close();
+    });
+  };
+
+  frontend.fullscreen_toggle = [this]() -> std::string {
+    QueueOnObject(this, [this]() { FullScreen(); });
+    return "OK";
+  };
+
+  frontend.is_fullscreen = [this]() -> bool {
+    return m_render_widget && m_render_widget->isFullScreen();
+  };
+
+  frontend.change_disc = [this](const std::string& b64path) -> std::string {
+    const std::string path = DolphinIPC::DecodeBase64(b64path);
+    if (path.empty())
+      return "ERR Invalid base64 path";
+    if (!Core::IsRunning(m_system))
+      return "ERR Emulation not running";
+    QueueOnObject(this, [this, path]() {
+      m_system.GetDVDInterface().ChangeDisc(Core::CPUThreadGuard{m_system}, path);
+    });
+    return "OK";
+  };
+
+  frontend.eject_disc = [this]() -> std::string {
+    if (!Core::IsRunning(m_system))
+      return "ERR Emulation not running";
+    QueueOnObject(this, [this]() {
+      m_system.GetDVDInterface().EjectDisc(Core::CPUThreadGuard{m_system}, DVD::EjectCause::User);
+    });
+    return "OK";
+  };
+
+  frontend.list_games = [this]() -> std::string {
+    const auto& model = m_game_list->GetGameListModel();
+    const int count = model.rowCount(QModelIndex());
+    picojson::array games;
+    for (int i = 0; i < count; ++i)
+    {
+      auto game = model.GetGameFile(i);
+      if (!game)
+        continue;
+      picojson::object g;
+      g.emplace("path", picojson::value(game->GetFilePath()));
+      g.emplace("game_id", picojson::value(game->GetGameID()));
+      g.emplace("title", picojson::value(game->GetLongName()));
+      g.emplace("maker_id", picojson::value(game->GetMakerID()));
+      g.emplace("maker", picojson::value(
+                             game->GetMaker(UICommon::GameFile::Variant::LongAndPossiblyCustom)));
+      g.emplace("platform",
+                picojson::value(static_cast<double>(static_cast<int>(game->GetPlatform()))));
+      g.emplace("region",
+                picojson::value(static_cast<double>(static_cast<int>(game->GetRegion()))));
+      g.emplace("disc_number", picojson::value(static_cast<double>(game->GetDiscNumber())));
+      g.emplace("revision", picojson::value(static_cast<double>(game->GetRevision())));
+      g.emplace("file_size", picojson::value(static_cast<double>(game->GetFileSize())));
+      games.emplace_back(picojson::value(g));
+    }
+    picojson::object result;
+    result.emplace("ok", picojson::value(true));
+    result.emplace("games", picojson::value(games));
+    return picojson::value(result).serialize();
+  };
+
+  auto handler = DolphinIPC::CreateHandlers(m_system, std::move(frontend));
+  m_ipc_server = std::make_unique<DolphinIPC::Server>(port, std::move(handler));
+  m_ipc_server->Start();
 }
 
 WindowSystemInfo MainWindow::GetWindowSystemInfo() const

@@ -447,6 +447,8 @@ const Info<std::string> MAIN_THEME_NAME{{System::Main, "Interface", "ThemeName"}
                                         DEFAULT_THEME_DIR};
 const Info<bool> MAIN_PAUSE_ON_FOCUS_LOST{{System::Main, "Interface", "PauseOnFocusLost"}, false};
 const Info<bool> MAIN_ENABLE_DEBUGGING{{System::Main, "Interface", "DebugModeEnabled"}, false};
+const Info<bool> MAIN_IPC_SERVER_ENABLED{{System::Main, "Interface", "IPCServerEnabled"}, false};
+const Info<int> MAIN_IPC_SERVER_PORT{{System::Main, "Interface", "IPCServerPort"}, 4830};
 
 // Main.Analytics
 

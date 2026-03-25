@@ -16,6 +16,7 @@
 #endif  // USE_RETRO_ACHIEVEMENTS
 
 #include "Core/Boot/Boot.h"
+#include "Core/DolphinIPC.h"
 #include "DolphinQt/FIFO/FIFOPlayerWindow.h"
 
 class QMenu;
@@ -147,6 +148,7 @@ private:
   void ShutdownControllers();
 
   void InitCoreCallbacks();
+  void InitIPCServer(u16 port);
 
   enum class ScanForSecondDisc
   {
@@ -291,4 +293,7 @@ private:
   WatchWidget* m_watch_widget;
   CheatsManager* m_cheats_manager{};
   QByteArray m_render_widget_geometry;
+
+  // IPC server for external control (enabled with --ipc_port)
+  std::unique_ptr<DolphinIPC::Server> m_ipc_server;
 };

@@ -204,6 +204,7 @@ signals:
   void CursorVisibilityChanged();
   void LockCursorChanged();
   void KeepWindowOnTopChanged(bool top);
+  void IPCServerSettingChanged();
   void NANDRefresh();
   void RegistersVisibilityChanged(bool visible);
   void ThreadsVisibilityChanged(bool visible);
