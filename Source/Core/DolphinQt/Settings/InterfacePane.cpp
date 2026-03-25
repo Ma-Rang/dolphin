@@ -208,15 +208,15 @@ void InterfacePane::CreateInGame()
   auto* render_layout = new QVBoxLayout;
   render_groupbox->setLayout(render_layout);
 
-  m_radio_render_emulation_only = new ConfigRadioInt(
-      tr("Only while running"), Config::MAIN_RENDER_WINDOW_PERSISTENCE,
-      static_cast<int>(Config::RenderWindowPersistence::EmulationOnly));
+  m_radio_render_emulation_only =
+      new ConfigRadioInt(tr("Only while running"), Config::MAIN_RENDER_WINDOW_PERSISTENCE,
+                         static_cast<int>(Config::RenderWindowPersistence::EmulationOnly));
   m_radio_render_game_switching = new ConfigRadioInt(
       tr("Keep open during game switching"), Config::MAIN_RENDER_WINDOW_PERSISTENCE,
       static_cast<int>(Config::RenderWindowPersistence::GameSwitching));
-  m_radio_render_always = new ConfigRadioInt(
-      tr("Keep open always"), Config::MAIN_RENDER_WINDOW_PERSISTENCE,
-      static_cast<int>(Config::RenderWindowPersistence::Always));
+  m_radio_render_always =
+      new ConfigRadioInt(tr("Keep open always"), Config::MAIN_RENDER_WINDOW_PERSISTENCE,
+                         static_cast<int>(Config::RenderWindowPersistence::Always));
 
   render_layout->addWidget(m_radio_render_emulation_only);
   render_layout->addWidget(m_radio_render_game_switching);
@@ -225,9 +225,9 @@ void InterfacePane::CreateInGame()
   if (Config::GetActiveLayerForConfig(Config::MAIN_RENDER_WINDOW_PERSISTENCE) ==
       Config::LayerType::CommandLine)
   {
-    auto* label = new QLabel(
-        tr("Currently overridden by --render_visibility command line argument. "
-           "Changes will take effect on next launch."));
+    auto* label =
+        new QLabel(tr("Currently overridden by --render_visibility command line argument. "
+                      "Changes will take effect on next launch."));
     label->setWordWrap(true);
     render_layout->addWidget(label);
   }
@@ -403,20 +403,20 @@ void InterfacePane::AddDescriptions()
   static constexpr char TR_PAUSE_ON_FOCUS_LOST_DESCRIPTION[] =
       QT_TR_NOOP("Pauses the game whenever the render window isn't focused."
                  "<br><br><dolphin_emphasis>If unsure, leave this unchecked.</dolphin_emphasis>");
-  static constexpr char TR_RENDER_EMULATION_ONLY_DESCRIPTION[] = QT_TR_NOOP(
-      "The render window is created when a game starts and destroyed when it stops. "
-      "This is the default Dolphin behavior."
-      "<br><br><dolphin_emphasis>If unsure, leave this selected.</dolphin_emphasis>");
-  static constexpr char TR_RENDER_GAME_SWITCHING_DESCRIPTION[] = QT_TR_NOOP(
-      "The render window stays open between game switches to avoid window flashing. "
-      "When emulation stops without another game queued, the window closes normally. "
-      "Recommended for frontends and automated game switching."
-      "<br><br><dolphin_emphasis>If unsure, leave this unselected.</dolphin_emphasis>");
-  static constexpr char TR_RENDER_ALWAYS_DESCRIPTION[] = QT_TR_NOOP(
-      "The render window is shown at startup and stays open at all times. "
-      "When no game is active, the window shows a black screen. "
-      "Recommended for kiosk and HTPC setups."
-      "<br><br><dolphin_emphasis>If unsure, leave this unselected.</dolphin_emphasis>");
+  static constexpr char TR_RENDER_EMULATION_ONLY_DESCRIPTION[] =
+      QT_TR_NOOP("The render window is created when a game starts and destroyed when it stops. "
+                 "This is the default Dolphin behavior."
+                 "<br><br><dolphin_emphasis>If unsure, leave this selected.</dolphin_emphasis>");
+  static constexpr char TR_RENDER_GAME_SWITCHING_DESCRIPTION[] =
+      QT_TR_NOOP("The render window stays open between game switches to avoid window flashing. "
+                 "When emulation stops without another game queued, the window closes normally. "
+                 "Recommended for frontends and automated game switching."
+                 "<br><br><dolphin_emphasis>If unsure, leave this unselected.</dolphin_emphasis>");
+  static constexpr char TR_RENDER_ALWAYS_DESCRIPTION[] =
+      QT_TR_NOOP("The render window is shown at startup and stays open at all times. "
+                 "When no game is active, the window shows a black screen. "
+                 "Recommended for kiosk and HTPC setups."
+                 "<br><br><dolphin_emphasis>If unsure, leave this unselected.</dolphin_emphasis>");
   static constexpr char TR_LOCK_MOUSE_DESCRIPTION[] =
       QT_TR_NOOP("Locks the mouse cursor to the Render Widget as long as it has focus. You can "
                  "set a hotkey to unlock it."

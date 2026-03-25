@@ -913,8 +913,7 @@ void MainWindow::OnStopComplete()
   // If a pending boot is queued and render persistence is enabled, recreate just
   // the render surface (child widget) to give D3D a fresh HWND, then boot
   // immediately.  The outer RenderWidget stays alive — no window flash.
-  if (m_pending_boot != nullptr &&
-      persist_mode != Config::RenderWindowPersistence::EmulationOnly)
+  if (m_pending_boot != nullptr && persist_mode != Config::RenderWindowPersistence::EmulationOnly)
   {
     const bool was_fullscreen = m_render_widget->isFullScreen();
 

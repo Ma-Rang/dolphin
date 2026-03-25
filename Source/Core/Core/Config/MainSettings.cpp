@@ -304,8 +304,7 @@ const Info<bool> MAIN_RENDER_WINDOW_AUTOSIZE{{System::Main, "Display", "RenderWi
 const Info<bool> MAIN_KEEP_WINDOW_ON_TOP{{System::Main, "Display", "KeepWindowOnTop"}, false};
 const Info<bool> MAIN_DISABLE_SCREENSAVER{{System::Main, "Display", "DisableScreenSaver"}, true};
 const Info<RenderWindowPersistence> MAIN_RENDER_WINDOW_PERSISTENCE{
-    {System::Main, "Display", "RenderWindowPersistence"},
-    RenderWindowPersistence::EmulationOnly};
+    {System::Main, "Display", "RenderWindowPersistence"}, RenderWindowPersistence::EmulationOnly};
 
 // Main.DSP
 
