@@ -22,25 +22,25 @@
 #include "AudioCommon/AudioCommon.h"
 #include "Common/CommonPaths.h"
 #include "Common/CommonTypes.h"
-#include "Common/FileUtil.h"
 #include "Common/Config/Config.h"
 #include "Common/Config/Layer.h"
+#include "Common/FileUtil.h"
 #include "Common/Logging/Log.h"
 #include "Common/StringUtil.h"
 #include "Common/Thread.h"
 #include "Common/Version.h"
 #include "Core/Config/MainSettings.h"
+#include "Core/Config/WiimoteSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
-#include "Core/Movie.h"
 #include "Core/HW/EXI/EXI_DeviceGecko.h"
 #include "Core/HW/SI/SI.h"
 #include "Core/HW/SI/SI_Device.h"
 #include "Core/HW/Wiimote.h"
 #include "Core/HW/WiimoteReal/WiimoteReal.h"
-#include "Core/Config/WiimoteSettings.h"
 #include "Core/IOS/ES/ES.h"
 #include "Core/IOS/IOS.h"
+#include "Core/Movie.h"
 #include "Core/State.h"
 #include "Core/System.h"
 #include "Core/WiiUtils.h"
@@ -65,16 +65,16 @@ std::string DecodeBase64(const std::string& encoded)
 
   // Determine decoded length.
   size_t decoded_len = 0;
-  int ret = mbedtls_base64_decode(nullptr, 0, &decoded_len,
-                                  reinterpret_cast<const unsigned char*>(encoded.data()),
-                                  encoded.size());
+  int ret =
+      mbedtls_base64_decode(nullptr, 0, &decoded_len,
+                            reinterpret_cast<const unsigned char*>(encoded.data()), encoded.size());
   if (ret != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL || decoded_len == 0)
     return {};
 
   std::vector<unsigned char> buf(decoded_len);
-  ret = mbedtls_base64_decode(buf.data(), buf.size(), &decoded_len,
-                              reinterpret_cast<const unsigned char*>(encoded.data()),
-                              encoded.size());
+  ret =
+      mbedtls_base64_decode(buf.data(), buf.size(), &decoded_len,
+                            reinterpret_cast<const unsigned char*>(encoded.data()), encoded.size());
   if (ret != 0)
     return {};
 
@@ -256,8 +256,7 @@ static std::string HandleSetConfig(const std::string& sys_name, const std::strin
   auto system = ResolveConfigSystem(sys_name);
   if (!system)
     return "ERR Invalid system name";
-  Config::GetLayer(Config::LayerType::Base)
-      ->Set(Config::Location{*system, section, key}, value);
+  Config::GetLayer(Config::LayerType::Base)->Set(Config::Location{*system, section, key}, value);
   Config::OnConfigChanged();
   Config::Save();
   return "OK";
@@ -287,8 +286,8 @@ static std::string HandleGCChangeDevice(Core::System& system, int channel, int d
   if (channel < 0 || channel > 3)
     return "ERR Invalid channel (0-3)";
   Core::QueueHostJob([&system, channel, device_type](Core::System&) {
-    system.GetSerialInterface().ChangeDevice(
-        static_cast<SerialInterface::SIDevices>(device_type), channel);
+    system.GetSerialInterface().ChangeDevice(static_cast<SerialInterface::SIDevices>(device_type),
+                                             channel);
   });
   return "OK";
 }
@@ -303,7 +302,6 @@ static std::string HandleGCAdapterStatus()
     return fmt::format("OK NOT_DETECTED {}", error_message);
   return "OK NOT_DETECTED";
 }
-
 
 // ---------------------------------------------------------------------------
 // v1 expansion handlers — save states, screenshot, system info, volume,
@@ -509,8 +507,8 @@ static std::string HandleGetConfigSchema(const std::string& section)
     settings.emplace_back(picojson::value(s));
   };
 
-  auto add_int = [&](const char* sys, const char* sec, const char* key, int default_val, int min_val,
-                      int max_val) {
+  auto add_int = [&](const char* sys, const char* sec, const char* key, int default_val,
+                     int min_val, int max_val) {
     picojson::object s;
     s.emplace("system", picojson::value(std::string(sys)));
     s.emplace("section", picojson::value(std::string(sec)));
@@ -524,7 +522,7 @@ static std::string HandleGetConfigSchema(const std::string& section)
   };
 
   auto add_float = [&](const char* sys, const char* sec, const char* key, float default_val,
-                        float min_val, float max_val) {
+                       float min_val, float max_val) {
     picojson::object s;
     s.emplace("system", picojson::value(std::string(sys)));
     s.emplace("section", picojson::value(std::string(sec)));
@@ -538,7 +536,7 @@ static std::string HandleGetConfigSchema(const std::string& section)
   };
 
   auto add_enum = [&](const char* sys, const char* sec, const char* key, const char* default_val,
-                       const std::vector<std::pair<std::string, std::string>>& options) {
+                      const std::vector<std::pair<std::string, std::string>>& options) {
     picojson::object s;
     s.emplace("system", picojson::value(std::string(sys)));
     s.emplace("section", picojson::value(std::string(sec)));
@@ -749,8 +747,8 @@ CommandHandler CreateHandlers(Core::System& system, FrontendCallbacks frontend)
   // --- Frontend-specific: boot, boot_nand, stop, fullscreen ---
 
   handler.on_boot = [&system, boot_fn = std::move(frontend.boot_game),
-                     boot_path_ptr = handler.last_boot_path](
-                        const std::string& b64path) -> std::string {
+                     boot_path_ptr =
+                         handler.last_boot_path](const std::string& b64path) -> std::string {
     const std::string path = DecodeBase64(b64path);
     if (path.empty())
       return "ERR Invalid base64 path";
@@ -760,8 +758,7 @@ CommandHandler CreateHandlers(Core::System& system, FrontendCallbacks frontend)
   };
 
   handler.on_boot_nand = [boot_nand_fn = std::move(frontend.boot_nand),
-                          boot_path_ptr = handler.last_boot_path](
-                             u64 title_id) -> std::string {
+                          boot_path_ptr = handler.last_boot_path](u64 title_id) -> std::string {
     boot_path_ptr->clear();
     boot_nand_fn(title_id);
     return "OK";
@@ -798,9 +795,7 @@ CommandHandler CreateHandlers(Core::System& system, FrontendCallbacks frontend)
   handler.on_install_wad = [&system](const std::string& b64path) {
     return HandleInstallWAD(system, b64path);
   };
-  handler.on_uninstall_title = [&system](u64 tid) {
-    return HandleUninstallTitle(system, tid);
-  };
+  handler.on_uninstall_title = [&system](u64 tid) { return HandleUninstallTitle(system, tid); };
   handler.on_is_title_installed = [&system](u64 tid) {
     return HandleIsTitleInstalled(system, tid);
   };
@@ -808,9 +803,10 @@ CommandHandler CreateHandlers(Core::System& system, FrontendCallbacks frontend)
 
   handler.on_get_config = [](const std::string& sys, const std::string& sec,
                              const std::string& key) { return HandleGetConfig(sys, sec, key); };
-  handler.on_set_config = [](const std::string& sys, const std::string& sec,
-                             const std::string& key,
-                             const std::string& val) { return HandleSetConfig(sys, sec, key, val); };
+  handler.on_set_config = [](const std::string& sys, const std::string& sec, const std::string& key,
+                             const std::string& val) {
+    return HandleSetConfig(sys, sec, key, val);
+  };
 
   handler.on_wiimote_sync = [&system]() { return HandleWiimoteSync(system); };
   handler.on_wiimote_refresh = []() { return HandleWiimoteRefresh(); };
@@ -945,7 +941,8 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
   }
   else if (c == "version")
   {
-    return JsonOkWith("version", picojson::value(static_cast<double>(PROTOCOL_VERSION))).serialize();
+    return JsonOkWith("version", picojson::value(static_cast<double>(PROTOCOL_VERSION)))
+        .serialize();
   }
   else if (c == "status")
   {
@@ -966,9 +963,7 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
       resp.emplace("game_id", picojson::value(sconfig.GetGameID()));
       resp.emplace("title", picojson::value(sconfig.GetTitleName()));
 
-      const std::string platform = sys.IsTriforce() ? "triforce" :
-                                   sys.IsWii()      ? "wii" :
-                                                       "gamecube";
+      const std::string platform = sys.IsTriforce() ? "triforce" : sys.IsWii() ? "wii" : "gamecube";
       resp.emplace("platform", picojson::value(platform));
 
       // Path is only meaningful for disc/executable boots, not NAND titles.
@@ -1082,8 +1077,7 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
         auto system = ResolveConfigSystem(*sys);
         if (!system)
         {
-          errors.emplace_back(
-              picojson::value(fmt::format("Invalid system name: {}", *sys)));
+          errors.emplace_back(picojson::value(fmt::format("Invalid system name: {}", *sys)));
           continue;
         }
         base_layer->Set(Config::Location{*system, *sec, *key}, *val);
@@ -1348,7 +1342,7 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
     picojson::object info;
     info.emplace("ok", picojson::value(true));
     const std::string payload = result.substr(3);  // skip "OK "
-    const std::vector<std::string> keys = {"VERSION",  "BRANCH",      "REVISION", "OS",
+    const std::vector<std::string> keys = {"VERSION",     "BRANCH",  "REVISION", "OS",
                                            "IPC_VERSION", "BACKEND", "USER_DIR"};
     for (size_t i = 0; i < keys.size(); ++i)
     {
@@ -1367,8 +1361,8 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
           break;
         }
       }
-      std::string value = (end != std::string::npos) ? payload.substr(start, end - start)
-                                                     : payload.substr(start);
+      std::string value =
+          (end != std::string::npos) ? payload.substr(start, end - start) : payload.substr(start);
       while (!value.empty() && value.back() == ' ')
         value.pop_back();
       std::string json_key = keys[i];
@@ -1421,8 +1415,8 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
     const std::string result = handler.on_toggle_mute();
     if (result.substr(0, 3) == "OK ")
     {
-      bool muted = result.find("MUTED") != std::string::npos &&
-                   result.find("UNMUTED") == std::string::npos;
+      bool muted =
+          result.find("MUTED") != std::string::npos && result.find("UNMUTED") == std::string::npos;
       return JsonOkWith("muted", picojson::value(muted)).serialize();
     }
     return JsonError("Failed to toggle mute").serialize();
@@ -1673,8 +1667,7 @@ struct Server::ClientConnection
     {
       std::size_t sent = 0;
       auto status = socket->send(ptr, remaining, sent);
-      if (status == sf::Socket::Status::Disconnected ||
-          status == sf::Socket::Status::Error)
+      if (status == sf::Socket::Status::Disconnected || status == sf::Socket::Status::Error)
       {
         running.store(false);
         return;
@@ -1785,8 +1778,7 @@ void Server::ServerThread()
     if (listener.accept(*new_client) == sf::Socket::Status::Done)
     {
       INFO_LOG_FMT(COMMON, "DolphinIPC: Client connected from {}:{}",
-                   new_client->getRemoteAddress().value().toString(),
-                   new_client->getRemotePort());
+                   new_client->getRemoteAddress().value().toString(), new_client->getRemotePort());
 
       auto connection = std::make_unique<ClientConnection>();
       connection->socket = std::move(new_client);
@@ -1804,8 +1796,7 @@ void Server::ServerThread()
           std::size_t received = 0;
           auto status = conn_ptr->socket->receive(recv_buf, sizeof(recv_buf), received);
 
-          if (status == sf::Socket::Status::Disconnected ||
-              status == sf::Socket::Status::Error)
+          if (status == sf::Socket::Status::Disconnected || status == sf::Socket::Status::Error)
           {
             INFO_LOG_FMT(COMMON, "DolphinIPC: Client disconnected");
             conn_ptr->running.store(false);
@@ -1864,18 +1855,17 @@ void Server::ServerThread()
     // Clean up disconnected clients
     {
       std::lock_guard lk(m_clients_mutex);
-      m_clients.erase(
-          std::remove_if(m_clients.begin(), m_clients.end(),
-                         [](const std::unique_ptr<ClientConnection>& c) {
-                           if (!c->running.load())
-                           {
-                             if (c->thread.joinable())
-                               c->thread.join();
-                             return true;
-                           }
-                           return false;
-                         }),
-          m_clients.end());
+      m_clients.erase(std::remove_if(m_clients.begin(), m_clients.end(),
+                                     [](const std::unique_ptr<ClientConnection>& c) {
+                                       if (!c->running.load())
+                                       {
+                                         if (c->thread.joinable())
+                                           c->thread.join();
+                                         return true;
+                                       }
+                                       return false;
+                                     }),
+                      m_clients.end());
     }
 
     Common::SleepCurrentThread(10);

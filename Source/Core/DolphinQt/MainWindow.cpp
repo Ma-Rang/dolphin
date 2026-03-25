@@ -426,9 +426,7 @@ void MainWindow::InitIPCServer(u16 port)
     });
   };
 
-  frontend.force_stop = [this]() {
-    QueueOnObject(this, [this]() { ForceStop(); });
-  };
+  frontend.force_stop = [this]() { QueueOnObject(this, [this]() { ForceStop(); }); };
 
   frontend.exit_app = [this]() {
     QueueOnObject(this, [this]() {
@@ -463,8 +461,7 @@ void MainWindow::InitIPCServer(u16 port)
     if (!Core::IsRunning(m_system))
       return "ERR Emulation not running";
     QueueOnObject(this, [this]() {
-      m_system.GetDVDInterface().EjectDisc(Core::CPUThreadGuard{m_system},
-                                           DVD::EjectCause::User);
+      m_system.GetDVDInterface().EjectDisc(Core::CPUThreadGuard{m_system}, DVD::EjectCause::User);
     });
     return "OK";
   };
@@ -483,11 +480,12 @@ void MainWindow::InitIPCServer(u16 port)
       g.emplace("game_id", picojson::value(game->GetGameID()));
       g.emplace("title", picojson::value(game->GetLongName()));
       g.emplace("maker_id", picojson::value(game->GetMakerID()));
-      g.emplace("maker",
-                picojson::value(game->GetMaker(UICommon::GameFile::Variant::LongAndPossiblyCustom)));
+      g.emplace("maker", picojson::value(
+                             game->GetMaker(UICommon::GameFile::Variant::LongAndPossiblyCustom)));
       g.emplace("platform",
                 picojson::value(static_cast<double>(static_cast<int>(game->GetPlatform()))));
-      g.emplace("region", picojson::value(static_cast<double>(static_cast<int>(game->GetRegion()))));
+      g.emplace("region",
+                picojson::value(static_cast<double>(static_cast<int>(game->GetRegion()))));
       g.emplace("disc_number", picojson::value(static_cast<double>(game->GetDiscNumber())));
       g.emplace("revision", picojson::value(static_cast<double>(game->GetRevision())));
       g.emplace("file_size", picojson::value(static_cast<double>(game->GetFileSize())));

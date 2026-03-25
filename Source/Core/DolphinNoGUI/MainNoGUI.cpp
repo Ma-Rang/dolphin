@@ -6,8 +6,8 @@
 #include <OptionParser.h>
 #include <csignal>
 #include <cstdio>
-#include <mutex>
 #include <fmt/format.h>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -219,13 +219,9 @@ static void InitIPCServer(u16 port)
     }
   };
 
-  frontend.exit_app = []() {
-    s_platform->RequestShutdown();
-  };
+  frontend.exit_app = []() { s_platform->RequestShutdown(); };
 
-  frontend.fullscreen_toggle = []() -> std::string {
-    return "ERR Not available in headless mode";
-  };
+  frontend.fullscreen_toggle = []() -> std::string { return "ERR Not available in headless mode"; };
 
   frontend.change_disc = [&system](const std::string& b64path) -> std::string {
     const std::string path = DolphinIPC::DecodeBase64(b64path);
@@ -248,9 +244,7 @@ static void InitIPCServer(u16 port)
     return "OK";
   };
 
-  frontend.list_games = []() -> std::string {
-    return "ERR Not available in headless mode";
-  };
+  frontend.list_games = []() -> std::string { return "ERR Not available in headless mode"; };
 
   auto handler = DolphinIPC::CreateHandlers(system, std::move(frontend));
   s_ipc_server = std::make_unique<DolphinIPC::Server>(port, std::move(handler));

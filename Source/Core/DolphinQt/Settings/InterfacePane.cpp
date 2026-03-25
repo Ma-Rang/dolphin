@@ -250,14 +250,12 @@ void InterfacePane::CreateRemoteControl()
   groupbox->setLayout(groupbox_layout);
   m_main_layout->addWidget(groupbox);
 
-  m_ipc_cli_override =
-      Config::GetActiveLayerForConfig(Config::MAIN_IPC_SERVER_ENABLED) ==
-          Config::LayerType::CommandLine ||
-      Config::GetActiveLayerForConfig(Config::MAIN_IPC_SERVER_PORT) ==
-          Config::LayerType::CommandLine;
+  m_ipc_cli_override = Config::GetActiveLayerForConfig(Config::MAIN_IPC_SERVER_ENABLED) ==
+                           Config::LayerType::CommandLine ||
+                       Config::GetActiveLayerForConfig(Config::MAIN_IPC_SERVER_PORT) ==
+                           Config::LayerType::CommandLine;
 
-  m_checkbox_ipc_enabled =
-      new ConfigBool(tr("Enable IPC Server"), Config::MAIN_IPC_SERVER_ENABLED);
+  m_checkbox_ipc_enabled = new ConfigBool(tr("Enable IPC Server"), Config::MAIN_IPC_SERVER_ENABLED);
 
   auto* port_layout = new QFormLayout;
   port_layout->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
@@ -271,9 +269,8 @@ void InterfacePane::CreateRemoteControl()
 
   if (m_ipc_cli_override)
   {
-    auto* label = new QLabel(
-        tr("Currently overridden by --ipc_port command line argument. "
-           "Changes will take effect on next launch."));
+    auto* label = new QLabel(tr("Currently overridden by --ipc_port command line argument. "
+                                "Changes will take effect on next launch."));
     label->setWordWrap(true);
     groupbox_layout->addWidget(label);
   }
