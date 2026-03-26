@@ -43,7 +43,7 @@
       <PreprocessorDefinitions Condition="'$(Platform)'=='x64'">HAS_OPENGL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions>HAS_VULKAN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions>HAS_LIBMGBA;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(AutoUpdate)'!='false'">AUTOUPDATE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!--Disabled for custom fork: <PreprocessorDefinitions Condition="'$(AutoUpdate)'!='false'">AUTOUPDATE;%(PreprocessorDefinitions)</PreprocessorDefinitions>-->
       <PreprocessorDefinitions>HAVE_SDL3;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions>USE_RETRO_ACHIEVEMENTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions>RC_CLIENT_SUPPORTS_HASH;%(PreprocessorDefinitions)</PreprocessorDefinitions>

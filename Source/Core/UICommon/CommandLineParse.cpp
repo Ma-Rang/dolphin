@@ -171,7 +171,6 @@ static void AddConfigLayer(const optparse::Values& options)
       std::move(config_args), static_cast<const char*>(options.get("video_backend")),
       static_cast<const char*>(options.get("audio_emulation")),
       static_cast<bool>(options.get("batch")), static_cast<bool>(options.get("debugger")),
-<<<<<<< HEAD
       static_cast<const char*>(options.get("render_visibility")),
       static_cast<int>(options.get("ipc_port"))));
 }
