@@ -22,6 +22,7 @@ enum class LogType : int
   CONTROLLERINTERFACE,
   CORE,
   DISCIO,
+  DOLPHIN_IPC,
   DSPHLE,
   DSPLLE,
   DSP_MAIL,

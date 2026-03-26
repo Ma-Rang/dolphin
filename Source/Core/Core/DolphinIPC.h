@@ -191,7 +191,7 @@ public:
 
 private:
   void ServerThread();
-  std::string HandleCommand(const std::string& line);
+  std::string HandleCommand(const std::string& line, bool& was_boot);
 
   u16 m_port;
   CommandHandler m_handler;
@@ -202,6 +202,10 @@ private:
   struct ClientConnection;
   std::mutex m_clients_mutex;
   std::vector<std::unique_ptr<ClientConnection>> m_clients;
+
+  // Serializes command dispatch across all client threads.
+  // After BOOT/BOOT_NAND, held until Core state leaves Uninitialized.
+  std::mutex m_dispatch_mutex;
 
   // Auto-deregisters when Server is destroyed.
   Common::EventHook m_state_hook;

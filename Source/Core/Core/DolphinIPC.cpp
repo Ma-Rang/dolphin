@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <chrono>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -920,7 +921,8 @@ static std::optional<double> JsonGetDouble(const picojson::object& obj, const st
 // HandleJsonCommand — dispatches JSON requests to the same handler logic
 // ---------------------------------------------------------------------------
 
-static std::string HandleJsonCommand(const std::string& line, const CommandHandler& handler)
+static std::string HandleJsonCommand(const std::string& line, const CommandHandler& handler,
+                                     bool& was_boot)
 {
   picojson::value parsed;
   const std::string err = picojson::parse(parsed, line);
@@ -988,6 +990,7 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
     // Encode path to base64 for the handler (which expects b64).
     std::string b64 = EncodeBase64(reinterpret_cast<const u8*>(path->data()), path->size());
     const std::string result = handler.on_boot(b64);
+    was_boot = true;
     if (result == "OK")
       return JsonOk().serialize();
     return JsonError(result.substr(0, 4) == "ERR " ? result.substr(4) : result).serialize();
@@ -1004,6 +1007,7 @@ static std::string HandleJsonCommand(const std::string& line, const CommandHandl
     if (!handler.on_boot_nand)
       return JsonError("Not implemented").serialize();
     const std::string result = handler.on_boot_nand(*title_id);
+    was_boot = true;
     if (result == "OK")
       return JsonOk().serialize();
     return JsonError(result.substr(0, 4) == "ERR " ? result.substr(4) : result).serialize();
@@ -1763,13 +1767,13 @@ void Server::ServerThread()
   sf::TcpListener listener;
   if (listener.listen(m_port) != sf::Socket::Status::Done)
   {
-    ERROR_LOG_FMT(COMMON, "DolphinIPC: Failed to listen on port {}", m_port);
+    ERROR_LOG_FMT(DOLPHIN_IPC, "Failed to listen on port {}", m_port);
     m_running.store(false);
     return;
   }
 
   listener.setBlocking(false);
-  INFO_LOG_FMT(COMMON, "DolphinIPC: Listening on TCP port {}", m_port);
+  INFO_LOG_FMT(DOLPHIN_IPC, "Listening on TCP port {}", m_port);
 
   while (m_running.load())
   {
@@ -1777,7 +1781,7 @@ void Server::ServerThread()
     auto new_client = std::make_unique<sf::TcpSocket>();
     if (listener.accept(*new_client) == sf::Socket::Status::Done)
     {
-      INFO_LOG_FMT(COMMON, "DolphinIPC: Client connected from {}:{}",
+      INFO_LOG_FMT(DOLPHIN_IPC, "Client connected from {}:{}",
                    new_client->getRemoteAddress().value().toString(), new_client->getRemotePort());
 
       auto connection = std::make_unique<ClientConnection>();
@@ -1798,7 +1802,7 @@ void Server::ServerThread()
 
           if (status == sf::Socket::Status::Disconnected || status == sf::Socket::Status::Error)
           {
-            INFO_LOG_FMT(COMMON, "DolphinIPC: Client disconnected");
+            INFO_LOG_FMT(DOLPHIN_IPC, "Client disconnected");
             conn_ptr->running.store(false);
             break;
           }
@@ -1810,7 +1814,7 @@ void Server::ServerThread()
             // Reject oversized buffers (prevents memory abuse).
             if (buffer.size() > MAX_COMMAND_LENGTH * 2)
             {
-              WARN_LOG_FMT(COMMON, "DolphinIPC: Client buffer too large, disconnecting");
+              WARN_LOG_FMT(DOLPHIN_IPC, "Client buffer too large, disconnecting");
               conn_ptr->running.store(false);
               break;
             }
@@ -1836,9 +1840,29 @@ void Server::ServerThread()
                 continue;
               }
 
-              std::string response = HandleCommand(line);
-              if (!response.empty())
-                conn_ptr->Send(response);
+              {
+                bool was_boot = false;
+                std::lock_guard dispatch_lock(m_dispatch_mutex);
+
+                INFO_LOG_FMT(DOLPHIN_IPC, ">> {}", line);
+                std::string response = HandleCommand(line, was_boot);
+                if (!response.empty())
+                {
+                  INFO_LOG_FMT(DOLPHIN_IPC, "<< {}", response);
+                  conn_ptr->Send(response);
+                }
+
+                // After BOOT/BOOT_NAND: hold the mutex until the boot actually
+                // starts.  This prevents NAND handlers on other client threads
+                // from creating temporary IOS::HLE::Kernel objects while the
+                // boot path is initializing WiiRoot.
+                if (was_boot)
+                {
+                  auto& system = Core::System::GetInstance();
+                  for (int i = 0; i < 100 && Core::IsUninitialized(system); ++i)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                }
+              }
             }
           }
           else
@@ -1872,11 +1896,13 @@ void Server::ServerThread()
   }
 }
 
-std::string Server::HandleCommand(const std::string& line)
+std::string Server::HandleCommand(const std::string& line, bool& was_boot)
 {
+  was_boot = false;
+
   // Dual-mode: lines starting with '{' are JSON, everything else is text protocol.
   if (!line.empty() && line[0] == '{')
-    return HandleJsonCommand(line, m_handler);
+    return HandleJsonCommand(line, m_handler, was_boot);
 
   // Parse command and arguments
   // Format: VERB [args...]
@@ -1916,7 +1942,10 @@ std::string Server::HandleCommand(const std::string& line)
     if (args.empty())
       return "ERR Missing path argument";
     if (m_handler.on_boot)
+    {
+      was_boot = true;
       return m_handler.on_boot(args);
+    }
     return "ERR Not implemented";
   }
   else if (verb == "BOOT_NAND")
@@ -1927,7 +1956,10 @@ std::string Server::HandleCommand(const std::string& line)
     if (!title_id)
       return "ERR Invalid title ID (expected 16-char hex)";
     if (m_handler.on_boot_nand)
+    {
+      was_boot = true;
       return m_handler.on_boot_nand(*title_id);
+    }
     return "ERR Not implemented";
   }
   else if (verb == "STOP")

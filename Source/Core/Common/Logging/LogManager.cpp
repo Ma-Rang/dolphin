@@ -106,6 +106,7 @@ LogManager::LogManager()
   m_log[LogType::CONTROLLERINTERFACE] = {"CI", "Controller Interface"};
   m_log[LogType::CORE] = {"CORE", "Core"};
   m_log[LogType::DISCIO] = {"DIO", "Disc IO"};
+  m_log[LogType::DOLPHIN_IPC] = {"IPC", "IPC Server"};
   m_log[LogType::DSPHLE] = {"DSPHLE", "DSP HLE"};
   m_log[LogType::DSPLLE] = {"DSPLLE", "DSP LLE"};
   m_log[LogType::DSP_MAIL] = {"DSPMails", "DSP Mails"};
